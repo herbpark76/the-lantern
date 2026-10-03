@@ -44,11 +44,18 @@ export function renderChapters(
   timeline: number,
   chapterOffset: number = 0
 ): Array<{ number: number; title: string; html: string }> {
-  return chapters.map((ch, idx) => ({
-    number: chapterOffset + idx + 1,
-    title: ch.title,
-    html: fillSlots(ch.body, variants, flags, timeline),
-  }));
+  const result: Array<{ number: number; title: string; html: string }> = [];
+  let num = chapterOffset;
+  for (const ch of chapters) {
+    if (!matchesWhen(ch.when ?? {}, flags, timeline)) continue;
+    num += 1;
+    result.push({
+      number: num,
+      title: ch.title,
+      html: fillSlots(ch.body, variants, flags, timeline),
+    });
+  }
+  return result;
 }
 
 export function markdownToHtml(md: string): string {

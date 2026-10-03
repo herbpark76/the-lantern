@@ -75,8 +75,8 @@ function extractFrontmatter(content: string): { frontmatter: Record<string, unkn
   return { frontmatter: parseYaml(fmMatch[1]) as Record<string, unknown>, body: fmMatch[2] };
 }
 
-function parseChapters(body: string): Array<{ title: string; body: string }> {
-  const chapters: Array<{ title: string; body: string }> = [];
+function parseChapters(body: string): Array<{ title: string; body: string; when: Record<string, unknown> }> {
+  const chapters: Array<{ title: string; body: string; when: Record<string, unknown> }> = [];
   const chapterRegex = /^## (.+)$/gm;
   const matches: Array<{ title: string; index: number }> = [];
   let m: RegExpExecArray | null;
@@ -84,13 +84,26 @@ function parseChapters(body: string): Array<{ title: string; body: string }> {
     matches.push({ title: m[1].trim(), index: m.index + m[0].length });
   }
   if (matches.length === 0) {
-    return [{ title: "", body: body.trim() }];
+    return [{ title: "", body: body.trim(), when: {} }];
   }
   for (let idx = 0; idx < matches.length; idx++) {
     const start = matches[idx].index;
     const end = idx + 1 < matches.length ? matches[idx + 1].index - matches[idx + 1].title.length - 4 : body.length;
-    const chapterBody = body.slice(start, end).trim();
-    chapters.push({ title: matches[idx].title, body: chapterBody });
+    let chapterBody = body.slice(start, end);
+
+    // Check for a <!-- when: {...} --> comment on the line immediately after the heading
+    let when: Record<string, unknown> = {};
+    const whenMatch = chapterBody.match(/^\s*<!--\s*when:\s*(\{[\s\S]*?\})\s*-->\s*\n/);
+    if (whenMatch) {
+      try {
+        when = JSON.parse(whenMatch[1]) as Record<string, unknown>;
+        chapterBody = chapterBody.slice(whenMatch[0].length);
+      } catch {
+        // leave when as {} if JSON is malformed
+      }
+    }
+
+    chapters.push({ title: matches[idx].title, body: chapterBody.trim(), when });
   }
   return chapters;
 }
@@ -247,7 +260,7 @@ async function syncStory(slug: string, supabase: ReturnType<typeof createClient>
   }
 
   const scenesDir = await githubGetDir(`content/${slug}/scenes`);
-  const sceneData: Array<{ frontmatter: SceneFrontmatter; chapters: Array<{ title: string; body: string }> }> = [];
+  const sceneData: Array<{ frontmatter: SceneFrontmatter; chapters: Array<{ title: string; body: string; when: Record<string, unknown> }> }> = [];
   for (const entry of scenesDir) {
     if (entry.type === "file" && entry.name.endsWith(".md")) {
       const content = await githubGet(entry.path);
@@ -307,6 +320,12 @@ async function syncStory(slug: string, supabase: ReturnType<typeof createClient>
   for (const scene of sceneData) {
     const allSlots = new Set<string>();
     for (const ch of scene.chapters) {
+      for (const flagKey of Object.keys(ch.when)) {
+        if (flagKey === "timeline" || flagKey === "timeline_gte") continue;
+        if (!declaredFlags.has(flagKey)) {
+          errors.push(`Scene "${scene.frontmatter.key}" chapter "${ch.title}" has when condition referencing undeclared flag "${flagKey}".`);
+        }
+      }
       for (const slot of extractSlots(ch.body)) {
         allSlots.add(slot);
       }
@@ -384,6 +403,7 @@ async function syncStory(slug: string, supabase: ReturnType<typeof createClient>
         position: pos,
         title: scene.chapters[pos].title,
         body: scene.chapters[pos].body,
+        when: scene.chapters[pos].when,
       });
     }
 

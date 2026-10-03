@@ -49,6 +49,7 @@ export interface Chapter {
   position: number;
   title: string;
   body: string;
+  when: Record<string, unknown>;
 }
 
 export interface Variant {
