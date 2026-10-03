@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.57.4";
+import { parse as parseYaml } from "jsr:@std/yaml@1.0.5";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -66,224 +67,12 @@ interface BibleFrontmatter {
   name: string;
 }
 
-// Simple YAML-ish parser for frontmatter blocks.
-// Handles key: value, nested objects, arrays of objects, and multiline strings (|-, |).
-function parseFrontmatter(yamlText: string): Record<string, unknown> {
-  const lines = yamlText.split("\n");
-  const result: Record<string, unknown> = {};
-  let i = 0;
-
-  function parseValue(val: string): unknown {
-    const trimmed = val.trim();
-    if (trimmed === "true") return true;
-    if (trimmed === "false") return false;
-    if (trimmed === "" ) return "";
-    if (/^-?\d+$/.test(trimmed)) return parseInt(trimmed, 10);
-    if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
-      const inner = trimmed.slice(1, -1).trim();
-      if (!inner) return [];
-      return inner.split(",").map((s) => s.trim().replace(/^["']|["']$/g, ""));
-    }
-    return trimmed.replace(/^["']|["']$/g, "");
-  }
-
-  function parseBlock(indent: number): Record<string, unknown> {
-    const obj: Record<string, unknown> = {};
-    while (i < lines.length) {
-      const line = lines[i];
-      if (line.trim() === "") { i++; continue; }
-      const lineIndent = line.length - line.trimStart().length;
-      if (lineIndent < indent) break;
-      if (lineIndent > indent) { i++; continue; }
-
-      const trimmed = line.trim();
-      if (trimmed.startsWith("- ")) {
-        // Array element — handled by parseArray
-        break;
-      }
-
-      const colonIdx = trimmed.indexOf(":");
-      if (colonIdx === -1) { i++; continue; }
-      const key = trimmed.slice(0, colonIdx).trim();
-      const valPart = trimmed.slice(colonIdx + 1).trim();
-
-      if (valPart === "") {
-        // Could be nested object or array
-        i++;
-        // Peek ahead
-        if (i < lines.length) {
-          const nextLine = lines[i];
-          const nextIndent = nextLine.length - nextLine.trimStart().length;
-          if (nextIndent > lineIndent) {
-            if (nextLine.trim().startsWith("- ")) {
-              obj[key] = parseArray(lineIndent + 2);
-            } else {
-              obj[key] = parseBlock(lineIndent + 2);
-            }
-          } else {
-            obj[key] = "";
-          }
-        } else {
-          obj[key] = "";
-        }
-      } else if (valPart === "|" || valPart === "|-" || valPart === ">") {
-        const stripDash = valPart === "|-";
-        i++;
-        const textLines: string[] = [];
-        const blockIndent = i < lines.length ? (lines[i].length - lines[i].trimStart().length) : 0;
-        while (i < lines.length) {
-          const bl = lines[i];
-          if (bl.trim() === "") { textLines.push(""); i++; continue; }
-          const blIndent = bl.length - bl.trimStart().length;
-          if (blIndent < blockIndent && bl.trim() !== "") break;
-          textLines.push(bl.slice(blockIndent));
-          i++;
-        }
-        if (stripDash) {
-          while (textLines.length > 0 && textLines[textLines.length - 1] === "") textLines.pop();
-        }
-        obj[key] = textLines.join("\n");
-      } else {
-        obj[key] = parseValue(valPart);
-        i++;
-      }
-    }
-    return obj;
-  }
-
-  function parseArray(indent: number): Array<Record<string, unknown>> {
-    const arr: Array<Record<string, unknown>> = [];
-    while (i < lines.length) {
-      const line = lines[i];
-      if (line.trim() === "") { i++; continue; }
-      const lineIndent = line.length - line.trimStart().length;
-      if (lineIndent < indent - 2) break;
-      if (lineIndent > indent) { i++; continue; }
-
-      const trimmed = line.trim();
-      if (!trimmed.startsWith("- ")) break;
-
-      const elementContent = trimmed.slice(2);
-      i++;
-
-      if (elementContent.includes(":")) {
-        // It's an object starting on the - line
-        const colonIdx = elementContent.indexOf(":");
-        const firstKey = elementContent.slice(0, colonIdx).trim();
-        const firstVal = elementContent.slice(colonIdx + 1).trim();
-
-        const obj: Record<string, unknown> = {};
-        if (firstVal === "" ) {
-          // Nested — look ahead
-          if (i < lines.length) {
-            const nextLine = lines[i];
-            const nextIndent = nextLine.length - nextLine.trimStart().length;
-            if (nextIndent > lineIndent) {
-              if (nextLine.trim().startsWith("- ")) {
-                obj[firstKey] = parseArray(nextIndent + 2);
-              } else {
-                obj[firstKey] = parseBlock(nextIndent);
-              }
-            } else {
-              obj[firstKey] = "";
-            }
-          } else {
-            obj[firstKey] = "";
-          }
-        } else if (firstVal === "|" || firstVal === "|-" || firstVal === ">") {
-          const stripDash = firstVal === "|-";
-          i++;
-          const textLines: string[] = [];
-          const blockIndent = i < lines.length ? (lines[i].length - lines[i].trimStart().length) : 0;
-          while (i < lines.length) {
-            const bl = lines[i];
-            if (bl.trim() === "") { textLines.push(""); i++; continue; }
-            const blIndent = bl.length - bl.trimStart().length;
-            if (blIndent < blockIndent && bl.trim() !== "") break;
-            textLines.push(bl.slice(blockIndent));
-            i++;
-          }
-          if (stripDash) {
-            while (textLines.length > 0 && textLines[textLines.length - 1] === "") textLines.pop();
-          }
-          obj[firstKey] = textLines.join("\n");
-        } else {
-          obj[firstKey] = parseValue(firstVal);
-        }
-
-        // Continue parsing remaining keys at the same indent
-        while (i < lines.length) {
-          const contLine = lines[i];
-          if (contLine.trim() === "") { i++; continue; }
-          const contIndent = contLine.length - contLine.trimStart().length;
-          if (contIndent < lineIndent) break;
-          if (contIndent > lineIndent) { i++; continue; }
-          if (contLine.trim().startsWith("- ")) break;
-
-          const cTrimmed = contLine.trim();
-          const cColonIdx = cTrimmed.indexOf(":");
-          if (cColonIdx === -1) { i++; continue; }
-          const cKey = cTrimmed.slice(0, cColonIdx).trim();
-          const cVal = cTrimmed.slice(cColonIdx + 1).trim();
-
-          if (cVal === "") {
-            i++;
-            if (i < lines.length) {
-              const nextLine = lines[i];
-              const nextIndent = nextLine.length - nextLine.trimStart().length;
-              if (nextIndent > contIndent) {
-                if (nextLine.trim().startsWith("- ")) {
-                  obj[cKey] = parseArray(nextIndent + 2);
-                } else {
-                  obj[cKey] = parseBlock(nextIndent);
-                }
-              } else {
-                obj[cKey] = "";
-              }
-            } else {
-              obj[cKey] = "";
-            }
-          } else if (cVal === "|" || cVal === "|-" || cVal === ">") {
-            const stripDash = cVal === "|-";
-            i++;
-            const textLines: string[] = [];
-            const blockIndent = i < lines.length ? (lines[i].length - lines[i].trimStart().length) : 0;
-            while (i < lines.length) {
-              const bl = lines[i];
-              if (bl.trim() === "") { textLines.push(""); i++; continue; }
-              const blIndent = bl.length - bl.trimStart().length;
-              if (blIndent < blockIndent && bl.trim() !== "") break;
-              textLines.push(bl.slice(blockIndent));
-              i++;
-            }
-            if (stripDash) {
-              while (textLines.length > 0 && textLines[textLines.length - 1] === "") textLines.pop();
-            }
-            obj[cKey] = textLines.join("\n");
-          } else {
-            obj[cKey] = parseValue(cVal);
-            i++;
-          }
-        }
-
-        arr.push(obj);
-      } else {
-        // Simple scalar array element
-        arr.push({ value: parseValue(elementContent) });
-      }
-    }
-    return arr;
-  }
-
-  return parseBlock(0);
-}
-
 function extractFrontmatter(content: string): { frontmatter: Record<string, unknown>; body: string } {
-  const fmMatch = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+  const fmMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
   if (!fmMatch) {
     return { frontmatter: {}, body: content };
   }
-  return { frontmatter: parseFrontmatter(fmMatch[1]), body: fmMatch[2] };
+  return { frontmatter: parseYaml(fmMatch[1]) as Record<string, unknown>, body: fmMatch[2] };
 }
 
 function parseChapters(body: string): Array<{ title: string; body: string }> {
@@ -314,6 +103,80 @@ function extractSlots(text: string): string[] {
     if (!slots.includes(m[1])) slots.push(m[1]);
   }
   return slots;
+}
+
+function asArray<T>(val: unknown): T[] {
+  if (Array.isArray(val)) return val as T[];
+  if (val == null) return [];
+  return [val] as T[];
+}
+
+function asStringArray(val: unknown): string[] {
+  const arr = asArray<unknown>(val);
+  return arr.map((item) => {
+    if (typeof item === "string") return item;
+    if (typeof item === "number") return String(item);
+    if (item && typeof item === "object") {
+      const obj = item as Record<string, unknown>;
+      const keys = Object.keys(obj);
+      if (keys.length === 1) return keys[0];
+    }
+    return String(item);
+  });
+}
+
+function asRecord(val: unknown): Record<string, unknown> {
+  if (val && typeof val === "object" && !Array.isArray(val)) {
+    return val as Record<string, unknown>;
+  }
+  return {};
+}
+
+function normalizeScene(raw: Record<string, unknown>): SceneFrontmatter {
+  const choices = asArray<Record<string, unknown>>(raw.choices).map((c) => {
+    const to = c.to ?? c.to_scene ?? c.to_scene_key;
+    return {
+      key: String(c.key ?? ""),
+      label: String(c.label ?? ""),
+      to: String(to ?? ""),
+      sets: asRecord(c.sets),
+      requires: asRecord(c.requires),
+    } satisfies ChoiceDef;
+  });
+
+  const variants = asArray<Record<string, unknown>>(raw.variants).map((v) => ({
+    slot: String(v.slot ?? ""),
+    when: asRecord(v.when),
+    text: String(v.text ?? ""),
+    priority: Number(v.priority ?? 0),
+  }) satisfies VariantDef);
+
+  const mapRaw = raw.map as Record<string, unknown> | undefined;
+  const map = mapRaw && typeof mapRaw === "object"
+    ? { x: Number(mapRaw.x ?? 0), y: Number(mapRaw.y ?? 0) }
+    : { x: 0, y: 0 };
+
+  return {
+    key: String(raw.key ?? ""),
+    title: String(raw.title ?? ""),
+    act: Number(raw.act ?? 1),
+    is_bottleneck: Boolean(raw.is_bottleneck ?? false),
+    is_ending: Boolean(raw.is_ending ?? false),
+    reads_flags: asStringArray(raw.reads_flags),
+    map,
+    choices,
+    variants,
+  };
+}
+
+function normalizeFlags(raw: unknown): FlagDef[] {
+  const arr = asArray<Record<string, unknown>>(raw);
+  return arr.map((f) => ({
+    key: String(f.key ?? ""),
+    type: (f.type as FlagDef["type"]) ?? "choice",
+    allowed_values: asArray<string>(f.allowed_values),
+    description: String(f.description ?? ""),
+  }));
 }
 
 async function githubGet(path: string): Promise<string> {
@@ -362,16 +225,13 @@ async function getCommitSha(): Promise<string> {
 async function syncStory(slug: string, supabase: ReturnType<typeof createClient>): Promise<{ ok: boolean; errors: string[] }> {
   const errors: string[] = [];
 
-  // Fetch story.yaml
   const storyYamlText = await githubGet(`content/${slug}/story.yaml`);
-  const storyFm = parseFrontmatter(storyYamlText) as unknown as StoryYaml;
+  const storyFm = parseYaml(storyYamlText) as StoryYaml;
 
-  // Fetch flags.yaml
   const flagsText = await githubGet(`content/${slug}/flags.yaml`);
-  const flagsParsed = parseFrontmatter(flagsText);
-  const flagDefs = (Array.isArray(flagsParsed) ? flagsParsed : [flagsParsed]) as FlagDef[];
+  const flagsParsed = parseYaml(flagsText);
+  const flagDefs = normalizeFlags(flagsParsed);
 
-  // Fetch bible entries
   const bibleEntries: Array<{ frontmatter: BibleFrontmatter; body: string }> = [];
   try {
     const bibleDir = await githubGetDir(`content/${slug}/bible`);
@@ -382,68 +242,60 @@ async function syncStory(slug: string, supabase: ReturnType<typeof createClient>
         bibleEntries.push({ frontmatter: frontmatter as unknown as BibleFrontmatter, body: body.trim() });
       }
     }
-  } catch (e) {
+  } catch {
     // bible dir might not exist
   }
 
-  // Fetch scenes
   const scenesDir = await githubGetDir(`content/${slug}/scenes`);
   const sceneData: Array<{ frontmatter: SceneFrontmatter; chapters: Array<{ title: string; body: string }> }> = [];
   for (const entry of scenesDir) {
     if (entry.type === "file" && entry.name.endsWith(".md")) {
       const content = await githubGet(entry.path);
       const { frontmatter, body } = extractFrontmatter(content);
-      const fm = frontmatter as unknown as SceneFrontmatter;
+      const fm = normalizeScene(frontmatter);
       const chapters = parseChapters(body);
       sceneData.push({ frontmatter: fm, chapters });
     }
   }
 
-  // === VALIDATION ===
-
-  // Collect all scene keys
   const sceneKeys = new Set(sceneData.map((s) => s.frontmatter.key));
 
-  // Check: at least one ending
   const hasEnding = sceneData.some((s) => s.frontmatter.is_ending === true);
   if (!hasEnding) {
     errors.push("No scene has is_ending: true — at least one ending is required.");
   }
 
-  // Check: every choice 'to' exists as a scene
   const declaredFlags = new Set(flagDefs.map((f) => f.key));
   for (const scene of sceneData) {
-    const choices = scene.frontmatter.choices || [];
-    for (const choice of choices) {
-      if (!sceneKeys.has(choice.to)) {
+    for (const choice of scene.frontmatter.choices) {
+      if (!choice.to || !sceneKeys.has(choice.to)) {
         errors.push(`Scene "${scene.frontmatter.key}" has choice "${choice.key}" with to: "${choice.to}" which does not exist as a scene.`);
       }
     }
   }
 
-  // Check: every flag used is declared
   for (const scene of sceneData) {
-    for (const rf of scene.frontmatter.reads_flags || []) {
+    for (const rf of scene.frontmatter.reads_flags) {
       if (!declaredFlags.has(rf)) {
         errors.push(`Scene "${scene.frontmatter.key}" reads_flags references "${rf}" which is not declared in flags.yaml.`);
       }
     }
-    for (const choice of scene.frontmatter.choices || []) {
-      for (const flagKey of Object.keys(choice.sets || {})) {
+    for (const choice of scene.frontmatter.choices) {
+      for (const flagKey of Object.keys(choice.sets)) {
         if (flagKey === "_new_timeline") continue;
         if (!declaredFlags.has(flagKey)) {
           errors.push(`Scene "${scene.frontmatter.key}" choice "${choice.key}" sets undeclared flag "${flagKey}".`);
         }
       }
-      for (const flagKey of Object.keys(choice.requires || {})) {
+      for (const flagKey of Object.keys(choice.requires)) {
         if (flagKey === "timeline" || flagKey === "timeline_gte") continue;
         if (!declaredFlags.has(flagKey)) {
           errors.push(`Scene "${scene.frontmatter.key}" choice "${choice.key}" requires undeclared flag "${flagKey}".`);
         }
       }
     }
-    for (const variant of scene.frontmatter.variants || []) {
-      for (const flagKey of Object.keys(variant.when || {})) {
+    for (const variant of scene.frontmatter.variants) {
+      for (const flagKey of Object.keys(variant.when)) {
         if (flagKey === "timeline" || flagKey === "timeline_gte") continue;
         if (!declaredFlags.has(flagKey)) {
           errors.push(`Scene "${scene.frontmatter.key}" variant for slot "${variant.slot}" references undeclared flag "${flagKey}" in when.`);
@@ -452,7 +304,6 @@ async function syncStory(slug: string, supabase: ReturnType<typeof createClient>
     }
   }
 
-  // Check: every slot used in a chapter has a variant with when: {}
   for (const scene of sceneData) {
     const allSlots = new Set<string>();
     for (const ch of scene.chapters) {
@@ -460,9 +311,8 @@ async function syncStory(slug: string, supabase: ReturnType<typeof createClient>
         allSlots.add(slot);
       }
     }
-    const variants = scene.frontmatter.variants || [];
     for (const slot of allSlots) {
-      const hasDefault = variants.some((v) => v.slot === slot && Object.keys(v.when || {}).length === 0);
+      const hasDefault = scene.frontmatter.variants.some((v) => v.slot === slot && Object.keys(v.when).length === 0);
       if (!hasDefault) {
         errors.push(`Scene "${scene.frontmatter.key}" uses slot "{{${slot}}}" but no variant has when: {} as a default.`);
       }
@@ -473,10 +323,8 @@ async function syncStory(slug: string, supabase: ReturnType<typeof createClient>
     return { ok: false, errors };
   }
 
-  // === WRITE TO DATABASE ===
   const commitSha = await getCommitSha();
 
-  // Upsert story
   const { error: storyErr } = await supabase.from("stories").upsert({
     slug,
     title: storyFm.title,
@@ -488,7 +336,6 @@ async function syncStory(slug: string, supabase: ReturnType<typeof createClient>
   });
   if (storyErr) errors.push(`DB error upserting story: ${storyErr.message}`);
 
-  // Delete existing content rows
   await supabase.from("chapters").delete().eq("story_slug", slug);
   await supabase.from("variants").delete().eq("story_slug", slug);
   await supabase.from("choices").delete().eq("story_slug", slug);
@@ -496,18 +343,16 @@ async function syncStory(slug: string, supabase: ReturnType<typeof createClient>
   await supabase.from("flags").delete().eq("story_slug", slug);
   await supabase.from("bible_entries").delete().eq("story_slug", slug);
 
-  // Insert flags
   for (const flag of flagDefs) {
     await supabase.from("flags").insert({
       story_slug: slug,
       key: flag.key,
       type: flag.type,
-      allowed_values: flag.allowed_values ?? [],
-      description: flag.description ?? "",
+      allowed_values: flag.allowed_values,
+      description: flag.description,
     });
   }
 
-  // Insert bible entries
   for (const entry of bibleEntries) {
     await supabase.from("bible_entries").insert({
       story_slug: slug,
@@ -518,7 +363,6 @@ async function syncStory(slug: string, supabase: ReturnType<typeof createClient>
     });
   }
 
-  // Insert scenes
   for (const scene of sceneData) {
     const fm = scene.frontmatter;
     await supabase.from("scenes").insert({
@@ -526,14 +370,13 @@ async function syncStory(slug: string, supabase: ReturnType<typeof createClient>
       key: fm.key,
       title: fm.title,
       act: fm.act,
-      is_bottleneck: fm.is_bottleneck ?? false,
-      is_ending: fm.is_ending ?? false,
-      reads_flags: fm.reads_flags ?? [],
-      map_x: fm.map?.x ?? null,
-      map_y: fm.map?.y ?? null,
+      is_bottleneck: fm.is_bottleneck,
+      is_ending: fm.is_ending,
+      reads_flags: fm.reads_flags,
+      map_x: fm.map.x,
+      map_y: fm.map.y,
     });
 
-    // Insert chapters
     for (let pos = 0; pos < scene.chapters.length; pos++) {
       await supabase.from("chapters").insert({
         story_slug: slug,
@@ -544,20 +387,18 @@ async function syncStory(slug: string, supabase: ReturnType<typeof createClient>
       });
     }
 
-    // Insert variants
-    for (const variant of fm.variants || []) {
+    for (const variant of fm.variants) {
       await supabase.from("variants").insert({
         story_slug: slug,
         scene_key: fm.key,
         slot: variant.slot,
-        when: variant.when ?? {},
+        when: variant.when,
         text: variant.text,
-        priority: variant.priority ?? 0,
+        priority: variant.priority,
       });
     }
 
-    // Insert choices
-    for (let pos = 0; pos < (fm.choices || []).length; pos++) {
+    for (let pos = 0; pos < fm.choices.length; pos++) {
       const choice = fm.choices[pos];
       await supabase.from("choices").insert({
         story_slug: slug,
@@ -566,8 +407,8 @@ async function syncStory(slug: string, supabase: ReturnType<typeof createClient>
         label: choice.label,
         to_scene_key: choice.to,
         position: pos,
-        sets: choice.sets ?? {},
-        requires: choice.requires ?? {},
+        sets: choice.sets,
+        requires: choice.requires,
       });
     }
   }
@@ -644,4 +485,3 @@ Deno.serve(async (req: Request) => {
     });
   }
 });
- 
