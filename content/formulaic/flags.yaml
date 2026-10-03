@@ -1,0 +1,24 @@
+- key: route
+  type: choice
+  allowed_values: ["gabriella", "suburban", "office", "none"]
+  description: Which way Frank went after the saucer (resets each timeline).
+- key: gabriella_answer
+  type: choice
+  allowed_values: ["truth", "lie", "silent", "none"]
+  description: "How Frank answered Gabriella's \"What did you do?\" (resets each timeline)."
+- key: card
+  type: choice
+  allowed_values: ["took", "refused", "none"]
+  description: Whether Frank took the coordinates card at the Suburban (resets each timeline).
+- key: office_choice
+  type: choice
+  allowed_values: ["corrected", "waited", "walked", "none"]
+  description: What Frank did at the front desk when Marcus's tag said DESMOND (resets each timeline).
+- key: lawyer_choice
+  type: choice
+  allowed_values: ["plan", "later", "none"]
+  description: Whether Frank agreed to Ira's two o'clock surrender (resets each timeline).
+- key: seen_suburban
+  type: boolean
+  allowed_values: []
+  description: Frank has walked down to the Suburban in some timeline. Survives loops, so later mornings can remember it.
