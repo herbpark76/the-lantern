@@ -53,6 +53,9 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
   const [narrationItems, setNarrationItems] = useState<NarrationItem[]>([]);
   const [narrationWaiting, setNarrationWaiting] = useState(false);
 
+  // Token that uniquely identifies the items list — changes when items are rebuilt
+  const [itemsToken, setItemsToken] = useState("");
+
   // Map sidebar open/closed — persisted per playthrough
   const mapOpenKey = `storymap:open:${playthroughId}`;
   const [mapOpen, setMapOpen] = useState(() => {
@@ -181,8 +184,10 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
       }
       if (cancelled) return;
       setRenderedChapters(rendered);
-      setNarrationItems(extractNarrationItems(rendered));
+      const newItems = extractNarrationItems(rendered);
+      setNarrationItems(newItems);
       setHighlightedIndex(null);
+      setItemsToken(sceneToken);
       setNarrationWaiting(false);
     })();
     return () => { cancelled = true; };
@@ -191,6 +196,11 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
   // Persist listen/speed
   useEffect(() => { localStorage.setItem(LISTEN_KEY, String(listenOn)); }, [listenOn]);
   useEffect(() => { localStorage.setItem(SPEED_KEY, String(narrationSpeed)); }, [narrationSpeed]);
+
+  // Unique token for the current scene state — changes on scene/timeline/step count change
+  const sceneToken = playthrough
+    ? `${playthroughId}:${playthrough.current_scene_key}:${playthrough.timeline}:${steps.length}`
+    : "";
 
   // Scroll highlighted item into view
   useEffect(() => {
@@ -267,7 +277,6 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
     setLoading(true);
     await loadData();
     setChoosing(false);
-    setNarrationWaiting(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -459,6 +468,8 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
       {listenOn && narrationConfigured && (narrationItems.length > 0 || narrationWaiting) && (
         <NarrationPlayer
           items={narrationItems}
+          itemsToken={itemsToken}
+          sceneToken={sceneToken}
           manifest={manifest}
           manifestUrl={manifestUrl}
           storySlug={slug}
@@ -468,7 +479,6 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
           onClose={() => { setListenOn(false); stopBrowserSpeech(); }}
           onHighlight={setHighlightedIndex}
           startIndex={highlightedIndex ?? 0}
-          sceneKey={playthrough.current_scene_key}
           waiting={narrationWaiting}
         />
       )}

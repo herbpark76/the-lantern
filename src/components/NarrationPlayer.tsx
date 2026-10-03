@@ -10,6 +10,8 @@ import {
 
 interface NarrationPlayerProps {
   items: NarrationItem[];
+  itemsToken: string;
+  sceneToken: string;
   manifest: NarrationManifest | null;
   manifestUrl: string | null;
   storySlug: string;
@@ -19,7 +21,6 @@ interface NarrationPlayerProps {
   onClose: () => void;
   onHighlight: (itemIndex: number) => void;
   startIndex?: number;
-  sceneKey: string;
   waiting: boolean;
 }
 
@@ -48,11 +49,10 @@ function isNextContiguous(
 }
 
 export function NarrationPlayer({
-  items, manifest, manifestUrl, storySlug, authToken,
-  speed, onSpeedChange, onClose, onHighlight, startIndex = 0,
-  sceneKey, waiting,
+  items, itemsToken, sceneToken, manifest, manifestUrl, storySlug, authToken,
+  speed, onSpeedChange, onClose, onHighlight, startIndex = 0, waiting,
 }: NarrationPlayerProps) {
-  const [currentIndex, setCurrentIndex] = useState(startIndex);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
   const [currentPlayback, setCurrentPlayback] = useState<NarrationPlayback | null>(null);
@@ -63,14 +63,18 @@ export function NarrationPlayer({
   // Refs for segment tracking — read by event handlers without stale closures
   const segRef = useRef<NarrationPlayback | null>(null);
   const loadedUrlRef = useRef<string | null>(null);
-  const currentIndexRef = useRef(startIndex);
+  const currentIndexRef = useRef(0);
   const advancingRef = useRef(false);
   const speedRef = useRef(speed);
   const itemsRef = useRef(items);
   const manifestRef = useRef(manifest);
   const manifestBaseUrlRef = useRef(manifestBaseUrl);
   const ttsIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const sceneKeyRef = useRef(sceneKey);
+
+  // Token refs for scene-transition safety
+  const itemsTokenRef = useRef(itemsToken);
+  const sceneTokenRef = useRef(sceneToken);
+  const waitingForTokenRef = useRef<string | null>(null);
 
   // Stop timers for precise segment ending
   const stopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -83,7 +87,7 @@ export function NarrationPlayer({
   useEffect(() => { itemsRef.current = items; }, [items]);
   useEffect(() => { manifestRef.current = manifest; }, [manifest]);
   useEffect(() => { manifestBaseUrlRef.current = manifestBaseUrl; }, [manifestBaseUrl]);
-  useEffect(() => { sceneKeyRef.current = sceneKey; }, [sceneKey]);
+  useEffect(() => { itemsTokenRef.current = itemsToken; }, [itemsToken]);
 
   // Clear all stop timers (timeout, rAF, fade rAF)
   const clearStopTimers = useCallback(() => {
@@ -224,6 +228,9 @@ export function NarrationPlayer({
   }, []);
 
   const playItem = useCallback(async (idx: number) => {
+    // Guard: don't play if items don't match the current scene
+    if (itemsTokenRef.current !== sceneTokenRef.current) return;
+
     const curItems = itemsRef.current;
     if (idx >= curItems.length) {
       setIsPlaying(false);
@@ -231,8 +238,6 @@ export function NarrationPlayer({
       segRef.current = null;
       return;
     }
-    // Guard: don't play if scene changed
-    if (!sceneKeyRef.current) return;
 
     const item = curItems[idx];
     onHighlight(idx);
@@ -287,6 +292,9 @@ export function NarrationPlayer({
         loadedUrlRef.current = next.audioUrl;
       }
 
+      // Guard again after async load
+      if (itemsTokenRef.current !== sceneTokenRef.current) return;
+
       audio.playbackRate = speedRef.current;
       audio.volume = originalVolumeRef.current;
       if (next.start !== undefined) {
@@ -331,7 +339,7 @@ export function NarrationPlayer({
     setLoading(false);
 
     // Guard: scene may have changed during async call
-    if (!sceneKeyRef.current) return;
+    if (itemsTokenRef.current !== sceneTokenRef.current) return;
 
     if (url) {
       const apiPlayback: NarrationPlayback = { mode: "api", audioUrl: url, start: 0 };
@@ -404,19 +412,50 @@ export function NarrationPlayer({
     };
   }, [goToNext]);
 
-  // Start playing on mount, and jump when user taps a paragraph
+  // --- Scene transition handling via tokens ---
+
+  // When sceneToken changes, stop everything and wait for matching items
   const mountedRef = useRef(false);
   useEffect(() => {
-    if (waiting) return;
+    sceneTokenRef.current = sceneToken;
     if (!mountedRef.current) {
       mountedRef.current = true;
-      void playItemRef.current(startIndex);
+      waitingForTokenRef.current = sceneToken;
       return;
     }
-    if (startIndex === currentIndexRef.current) return;
+    // Scene changed: stop all playback, reset index to 0
+    stopPreviousSource();
+    advancingRef.current = false;
+    segRef.current = null;
+    currentIndexRef.current = 0;
+    setCurrentIndex(0);
+    setIsPlaying(false);
+    setCurrentPlayback(null);
+    waitingForTokenRef.current = sceneToken;
+  }, [sceneToken, stopPreviousSource]);
+
+  // When items arrive and match the scene we're waiting for, start at index 0
+  useEffect(() => {
+    if (waiting) return;
+    if (!waitingForTokenRef.current) return;
+    if (itemsToken !== waitingForTokenRef.current) return;
+    // Items are ready for the current scene — start playback at 0
+    waitingForTokenRef.current = null;
+    currentIndexRef.current = 0;
+    setCurrentIndex(0);
+    void playItemRef.current(0);
+  }, [waiting, itemsToken, sceneToken]);
+
+  // Paragraph tap: jump to a specific index within the same scene
+  const lastStartIndexRef = useRef(startIndex);
+  useEffect(() => {
+    if (waiting) return;
+    if (waitingForTokenRef.current) return; // scene transition in progress
+    if (startIndex === lastStartIndexRef.current) return;
+    lastStartIndexRef.current = startIndex;
     stopPreviousSource();
     void playItemRef.current(startIndex);
-  }, [startIndex, stopPreviousSource, waiting]);
+  }, [startIndex, waiting, stopPreviousSource]);
 
   // When waiting becomes true, stop everything
   useEffect(() => {
