@@ -30,16 +30,15 @@ choices:
 variants:
 - slot: nametag
   when: {}
-  text: '**DESMOND**'
+  text: '*A brass name tag reading DESMOND.*'
   priority: 0
 - slot: nametag
   when:
     timeline_gte: 2
-  text: |-
-    **DESMOND**
-    *Underneath it, faintly, another name: MARCUS.*
+  text: '*A brass name tag reading DESMOND. Underneath, faintly, another name.*'
   priority: 10
 ---
+
 
 ## Normal
 

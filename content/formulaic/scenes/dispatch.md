@@ -23,34 +23,53 @@ choices:
 variants:
 - slot: cup_hour
   when: {}
-  text: The handle pointed at two o'clock.
+  text: |-
+    *A saucer seen from above. The cup handle points at two o'clock.*
+
+    The handle pointed at two o'clock.
   priority: 0
 - slot: cup_hour
   when:
     timeline: 2
-  text: The handle pointed at one o'clock.
+  text: |-
+    *A saucer seen from above. The cup handle points at one o'clock.*
+
+    The handle pointed at one o'clock.
   priority: 10
 - slot: cup_hour
   when:
     timeline: 3
-  text: The handle pointed at twelve o'clock.
+  text: |-
+    *A saucer seen from above. The cup handle points at twelve o'clock.*
+
+    The handle pointed at twelve o'clock.
   priority: 10
 - slot: cup_hour
   when:
     timeline: 4
-  text: The handle pointed at eleven o'clock.
+  text: |-
+    *A saucer seen from above. The cup handle points at eleven o'clock.*
+
+    The handle pointed at eleven o'clock.
   priority: 10
 - slot: cup_hour
   when:
     timeline: 5
-  text: The handle pointed at ten o'clock.
+  text: |-
+    *A saucer seen from above. The cup handle points at ten o'clock.*
+
+    The handle pointed at ten o'clock.
   priority: 10
 - slot: cup_hour
   when:
     timeline_gte: 6
-  text: The handle pointed at nine o'clock.
+  text: |-
+    *A saucer seen from above. The cup handle points at nine o'clock.*
+
+    The handle pointed at nine o'clock.
   priority: 5
 ---
+
 
 ## 911
 
