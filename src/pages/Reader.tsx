@@ -50,7 +50,8 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
   });
   const [manifest, setManifest] = useState<NarrationManifest | null>(null);
   const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null);
-  const narrationItemsRef = useRef<NarrationItem[]>([]);
+  const [narrationItems, setNarrationItems] = useState<NarrationItem[]>([]);
+  const [narrationWaiting, setNarrationWaiting] = useState(false);
 
   const narrationConfigured = !!storySettings?.narration;
   const manifestUrl = storySettings?.narration?.manifest ?? null;
@@ -167,8 +168,9 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
       }
       if (cancelled) return;
       setRenderedChapters(rendered);
-      narrationItemsRef.current = extractNarrationItems(rendered);
+      setNarrationItems(extractNarrationItems(rendered));
       setHighlightedIndex(null);
+      setNarrationWaiting(false);
     })();
     return () => { cancelled = true; };
   }, [chapters, variants, playthrough, chapterOffset, scene]);
@@ -193,6 +195,7 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
   const handleChoice = async (choice: Choice) => {
     if (!playthrough || !profile || choosing) return;
     setChoosing(true);
+    setNarrationWaiting(true);
     stopBrowserSpeech();
 
     const { flags: newFlags, incrementTimeline } = applySets(
@@ -251,6 +254,7 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
     setLoading(true);
     await loadData();
     setChoosing(false);
+    setNarrationWaiting(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -260,8 +264,6 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
     setHighlightedIndex(itemIndex);
   };
 
-  // Build a map from data-narration-idx to rendered HTML for each chapter
-  const narrationItems = narrationItemsRef.current;
   let narrationItemCounter = 0;
 
   if (loading) {
@@ -430,8 +432,8 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
         </div>
       </div>
 
-      {/* Narration player */}
-      {listenOn && narrationConfigured && narrationItems.length > 0 && (
+      {/* Narration player — mounted whenever listening is on, even during scene transitions */}
+      {listenOn && narrationConfigured && (narrationItems.length > 0 || narrationWaiting) && (
         <NarrationPlayer
           items={narrationItems}
           manifest={manifest}
@@ -443,6 +445,8 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
           onClose={() => { setListenOn(false); stopBrowserSpeech(); }}
           onHighlight={setHighlightedIndex}
           startIndex={highlightedIndex ?? 0}
+          sceneKey={playthrough.current_scene_key}
+          waiting={narrationWaiting}
         />
       )}
 

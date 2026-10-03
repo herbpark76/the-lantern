@@ -19,13 +19,38 @@ interface NarrationPlayerProps {
   onClose: () => void;
   onHighlight: (itemIndex: number) => void;
   startIndex?: number;
+  sceneKey: string;
+  waiting: boolean;
 }
 
 const SPEEDS = [0.9, 1, 1.1, 1.25, 1.5];
 
+function isNextContiguous(
+  items: NarrationItem[],
+  idx: number,
+  manifest: NarrationManifest | null,
+  manifestBaseUrl: string,
+  currentSeg: NarrationPlayback,
+  loadedUrl: string | null,
+): boolean {
+  const nextIdx = idx + 1;
+  if (nextIdx >= items.length) return false;
+  const nextSeg = resolveNarration(items[nextIdx], manifest, manifestBaseUrl);
+  return (
+    !!nextSeg &&
+    nextSeg.mode === "manifest" &&
+    nextSeg.audioUrl === currentSeg.audioUrl &&
+    nextSeg.audioUrl === loadedUrl &&
+    nextSeg.start !== undefined &&
+    currentSeg.end !== undefined &&
+    Math.abs(nextSeg.start - currentSeg.end) < 0.15
+  );
+}
+
 export function NarrationPlayer({
   items, manifest, manifestUrl, storySlug, authToken,
   speed, onSpeedChange, onClose, onHighlight, startIndex = 0,
+  sceneKey, waiting,
 }: NarrationPlayerProps) {
   const [currentIndex, setCurrentIndex] = useState(startIndex);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -45,12 +70,27 @@ export function NarrationPlayer({
   const manifestRef = useRef(manifest);
   const manifestBaseUrlRef = useRef(manifestBaseUrl);
   const ttsIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sceneKeyRef = useRef(sceneKey);
+
+  // Stop timers for precise segment ending
+  const stopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const fadeRafRef = useRef<number | null>(null);
+  const originalVolumeRef = useRef(1);
 
   // Keep refs in sync
   useEffect(() => { speedRef.current = speed; }, [speed]);
   useEffect(() => { itemsRef.current = items; }, [items]);
   useEffect(() => { manifestRef.current = manifest; }, [manifest]);
   useEffect(() => { manifestBaseUrlRef.current = manifestBaseUrl; }, [manifestBaseUrl]);
+  useEffect(() => { sceneKeyRef.current = sceneKey; }, [sceneKey]);
+
+  // Clear all stop timers (timeout, rAF, fade rAF)
+  const clearStopTimers = useCallback(() => {
+    if (stopTimeoutRef.current) { clearTimeout(stopTimeoutRef.current); stopTimeoutRef.current = null; }
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+    if (fadeRafRef.current) { cancelAnimationFrame(fadeRafRef.current); fadeRafRef.current = null; }
+  }, []);
 
   // Fully stop whatever source is currently active
   const stopPreviousSource = useCallback(() => {
@@ -59,18 +99,19 @@ export function NarrationPlayer({
       clearInterval(ttsIntervalRef.current);
       ttsIntervalRef.current = null;
     }
+    clearStopTimers();
     const audio = audioRef.current;
     if (audio) {
       audio.pause();
+      audio.volume = originalVolumeRef.current;
     }
-  }, []);
+  }, [clearStopTimers]);
 
   // Wait for the audio element to finish seeking to a given time
   const waitForSeeked = (audio: HTMLAudioElement) =>
     new Promise<void>((resolve) => {
       const handler = () => { audio.removeEventListener("seeked", handler); resolve(); };
       audio.addEventListener("seeked", handler);
-      // Safety timeout in case 'seeked' never fires
       setTimeout(() => { audio.removeEventListener("seeked", handler); resolve(); }, 300);
     });
 
@@ -82,6 +123,87 @@ export function NarrationPlayer({
     });
 
   const playItemRef = useRef<(idx: number) => Promise<void>>(async () => {});
+
+  // Schedule precise stop for a manifest segment
+  const scheduleSegmentStop = useCallback((
+    audio: HTMLAudioElement,
+    seg: NarrationPlayback,
+    idx: number,
+    willFade: boolean,
+  ) => {
+    clearStopTimers();
+    if (seg.end === undefined) return;
+
+    const rate = audio.playbackRate || 1;
+    const remaining = (seg.end - audio.currentTime) / rate;
+    const targetTime = seg.end - 0.04;
+
+    // Schedule rAF polling ~80ms before segment end
+    const rafDelay = Math.max(0, (remaining - 0.08) * 1000);
+
+    stopTimeoutRef.current = setTimeout(() => {
+      // rAF loop: pause when we reach targetTime
+      const poll = () => {
+        if (audio.paused) {
+          rafRef.current = null;
+          return;
+        }
+        if (audio.currentTime >= targetTime) {
+          audio.pause();
+          audio.currentTime = seg.end!;
+          audio.volume = originalVolumeRef.current;
+          rafRef.current = null;
+
+          // Advance to next
+          if (!advancingRef.current) {
+            advancingRef.current = true;
+            const nextIdx = idx + 1;
+            if (nextIdx >= itemsRef.current.length) {
+              setIsPlaying(false);
+              setCurrentPlayback(null);
+              segRef.current = null;
+              advancingRef.current = false;
+              return;
+            }
+            currentIndexRef.current = nextIdx;
+            setCurrentIndex(nextIdx);
+            advancingRef.current = false;
+            void playItemRef.current(nextIdx);
+          }
+          return;
+        }
+        rafRef.current = requestAnimationFrame(poll);
+      };
+      rafRef.current = requestAnimationFrame(poll);
+    }, rafDelay);
+
+    // Volume fade over last 60ms for non-contiguous segments
+    if (willFade) {
+      const fadeDelay = Math.max(0, (remaining - 0.06) * 1000);
+      setTimeout(() => {
+        if (audio.paused || rafRef.current === null) return; // segment already ended
+        const startTime = performance.now();
+        const startVol = audio.volume;
+        const fadeDuration = 60;
+        const animateFade = () => {
+          if (audio.paused) {
+            audio.volume = originalVolumeRef.current;
+            fadeRafRef.current = null;
+            return;
+          }
+          const elapsed = performance.now() - startTime;
+          const progress = Math.min(1, elapsed / fadeDuration);
+          audio.volume = startVol * (1 - progress);
+          if (progress < 1) {
+            fadeRafRef.current = requestAnimationFrame(animateFade);
+          } else {
+            fadeRafRef.current = null;
+          }
+        };
+        fadeRafRef.current = requestAnimationFrame(animateFade);
+      }, fadeDelay);
+    }
+  }, [clearStopTimers]);
 
   const goToNext = useCallback(() => {
     if (advancingRef.current) return;
@@ -109,6 +231,9 @@ export function NarrationPlayer({
       segRef.current = null;
       return;
     }
+    // Guard: don't play if scene changed
+    if (!sceneKeyRef.current) return;
+
     const item = curItems[idx];
     onHighlight(idx);
     setCurrentIndex(idx);
@@ -120,11 +245,8 @@ export function NarrationPlayer({
       setLoading(false);
       setUsingBrowserTTS(false);
 
-      // Read the PREVIOUS segment before overwriting the ref
       const prev = segRef.current;
 
-      // Stop any previous non-manifest source (TTS interval, API audio, etc.)
-      // Only keep the audio playing if prev was a manifest segment in the same file
       const prevWasContiguousManifest =
         prev && prev.mode === "manifest" && prev.audioUrl === next.audioUrl &&
         loadedUrlRef.current === next.audioUrl;
@@ -133,23 +255,30 @@ export function NarrationPlayer({
         stopPreviousSource();
       }
 
-      // Now assign the new segment
       segRef.current = next;
       setCurrentPlayback(next);
 
       const audio = audioRef.current;
       if (!audio) return;
 
-      // Contiguous fast-path: ONLY after a manifest item, same file loaded, currently playing, times align
+      // Contiguous fast-path
       if (prevWasContiguousManifest && !audio.paused &&
           prev && prev.end !== undefined && next.start !== undefined &&
           Math.abs(next.start - prev.end) < 0.15) {
         audio.playbackRate = speedRef.current;
+        // Schedule stop for this contiguous segment
+        const hasNext = isNextContiguous(
+          curItems, idx, manifestRef.current, manifestBaseUrlRef.current,
+          next, loadedUrlRef.current,
+        );
+        if (next.end !== undefined) {
+          scheduleSegmentStop(audio, next, idx, !hasNext);
+        }
         setIsPlaying(true);
         return;
       }
 
-      // Not contiguous (or switching from non-manifest) — reload file if needed
+      // Not contiguous — reload file if needed
       const needsLoad = loadedUrlRef.current !== next.audioUrl || !audio.currentSrc;
       if (needsLoad && next.audioUrl) {
         audio.src = next.audioUrl;
@@ -159,6 +288,7 @@ export function NarrationPlayer({
       }
 
       audio.playbackRate = speedRef.current;
+      audio.volume = originalVolumeRef.current;
       if (next.start !== undefined) {
         audio.currentTime = next.start;
         await waitForSeeked(audio);
@@ -169,7 +299,6 @@ export function NarrationPlayer({
         setIsPlaying(true);
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") {
-          // Retry once after load completes
           await waitForCanPlay(audio);
           try {
             await audio.play();
@@ -181,17 +310,28 @@ export function NarrationPlayer({
           setIsPlaying(false);
         }
       }
+
+      // Schedule precise stop
+      if (next.end !== undefined) {
+        const hasNext = isNextContiguous(
+          curItems, idx, manifestRef.current, manifestBaseUrlRef.current,
+          next, loadedUrlRef.current,
+        );
+        scheduleSegmentStop(audio, next, idx, !hasNext);
+      }
       return;
     }
 
     // Stop any previous source before switching to API/TTS
     stopPreviousSource();
 
-    // Only call edge function when manifest truly has no entry
     setLoading(true);
     setUsingBrowserTTS(false);
     const url = await narrateViaEdgeFunction(storySlug, item.plainText, authToken);
     setLoading(false);
+
+    // Guard: scene may have changed during async call
+    if (!sceneKeyRef.current) return;
 
     if (url) {
       const apiPlayback: NarrationPlayback = { mode: "api", audioUrl: url, start: 0 };
@@ -241,47 +381,15 @@ export function NarrationPlayer({
         goToNext();
       }
     }, 200);
-  }, [onHighlight, storySlug, authToken, goToNext, stopPreviousSource]);
+  }, [onHighlight, storySlug, authToken, goToNext, stopPreviousSource, scheduleSegmentStop]);
 
   // Keep playItemRef in sync
   useEffect(() => { playItemRef.current = playItem; }, [playItem]);
 
-  // Audio event handlers — read from refs, not state
+  // Audio 'ended' handler for API/non-manifest sources
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
-
-    const onTimeUpdate = () => {
-      const seg = segRef.current;
-      if (!seg || seg.mode !== "manifest" || seg.end === undefined) return;
-      if (advancingRef.current) return;
-
-      if (audio.currentTime >= seg.end) {
-        // Check if next segment is in the same file and contiguous
-        const nextIdx = currentIndexRef.current + 1;
-        if (nextIdx < itemsRef.current.length) {
-          const nextItem = itemsRef.current[nextIdx];
-          const nextSeg = resolveNarration(nextItem, manifestRef.current, manifestBaseUrlRef.current);
-          if (nextSeg && nextSeg.mode === "manifest" &&
-              nextSeg.audioUrl === seg.audioUrl &&
-              nextSeg.audioUrl === loadedUrlRef.current &&
-              !audio.paused &&
-              nextSeg.start !== undefined &&
-              Math.abs(nextSeg.start - seg.end) < 0.15) {
-            // Contiguous in same file — don't pause, just advance segRef
-            currentIndexRef.current = nextIdx;
-            setCurrentIndex(nextIdx);
-            onHighlight(nextIdx);
-            segRef.current = nextSeg;
-            setCurrentPlayback(nextSeg);
-            return;
-          }
-        }
-        // Not contiguous — pause and advance
-        audio.pause();
-        goToNext();
-      }
-    };
 
     const onEnded = () => {
       const seg = segRef.current;
@@ -290,20 +398,16 @@ export function NarrationPlayer({
       }
     };
 
-    audio.addEventListener("timeupdate", onTimeUpdate);
     audio.addEventListener("ended", onEnded);
     return () => {
-      audio.removeEventListener("timeupdate", onTimeUpdate);
       audio.removeEventListener("ended", onEnded);
     };
-  }, [goToNext, onHighlight]);
+  }, [goToNext]);
 
-  // Start playing on mount, and jump when the user taps a paragraph
-  // (startIndex changes but currentIndexRef hasn't, so they differ).
-  // When the player itself advances and calls onHighlight, the parent feeds
-  // the same index back as startIndex — currentIndexRef already matches, so we skip.
+  // Start playing on mount, and jump when user taps a paragraph
   const mountedRef = useRef(false);
   useEffect(() => {
+    if (waiting) return;
     if (!mountedRef.current) {
       mountedRef.current = true;
       void playItemRef.current(startIndex);
@@ -312,42 +416,82 @@ export function NarrationPlayer({
     if (startIndex === currentIndexRef.current) return;
     stopPreviousSource();
     void playItemRef.current(startIndex);
-  }, [startIndex, stopPreviousSource]);
+  }, [startIndex, stopPreviousSource, waiting]);
+
+  // When waiting becomes true, stop everything
+  useEffect(() => {
+    if (waiting) {
+      stopPreviousSource();
+      advancingRef.current = false;
+      segRef.current = null;
+      setIsPlaying(false);
+      setCurrentPlayback(null);
+    }
+  }, [waiting, stopPreviousSource]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       stopBrowserSpeech();
       if (ttsIntervalRef.current) clearInterval(ttsIntervalRef.current);
+      clearStopTimers();
     };
-  }, []);
+  }, [clearStopTimers]);
 
-  // Update playback rate
+  // Update playback rate — re-schedule stop if playing a manifest segment
   useEffect(() => {
     if (audioRef.current && !usingBrowserTTS) {
       audioRef.current.playbackRate = speed;
     }
-  }, [speed, usingBrowserTTS]);
+    // Re-schedule stop timer for current manifest segment
+    const seg = segRef.current;
+    const audio = audioRef.current;
+    if (seg && seg.mode === "manifest" && seg.end !== undefined && audio && !audio.paused && !advancingRef.current) {
+      const hasNext = isNextContiguous(
+        itemsRef.current, currentIndexRef.current,
+        manifestRef.current, manifestBaseUrlRef.current,
+        seg, loadedUrlRef.current,
+      );
+      scheduleSegmentStop(audio, seg, currentIndexRef.current, !hasNext);
+    }
+  }, [speed, usingBrowserTTS, scheduleSegmentStop]);
 
   const handlePlayPause = () => {
+    if (waiting) return;
     if (isPlaying) {
       if (usingBrowserTTS) {
         stopBrowserSpeech();
       } else {
         audioRef.current?.pause();
+        clearStopTimers();
       }
       setIsPlaying(false);
     } else {
       if (usingBrowserTTS) {
         playItem(currentIndex);
       } else {
-        audioRef.current?.play();
+        const audio = audioRef.current;
+        if (audio) {
+          audio.volume = originalVolumeRef.current;
+          void audio.play();
+          // Re-schedule stop for current segment
+          const seg = segRef.current;
+          if (seg && seg.mode === "manifest" && seg.end !== undefined) {
+            const hasNext = isNextContiguous(
+              itemsRef.current, currentIndexRef.current,
+              manifestRef.current, manifestBaseUrlRef.current,
+              seg, loadedUrlRef.current,
+            );
+            scheduleSegmentStop(audio, seg, currentIndexRef.current, !hasNext);
+          }
+        }
         setIsPlaying(true);
       }
     }
   };
 
   const handlePrev = () => {
+    if (waiting) return;
     stopPreviousSource();
     const prev = Math.max(0, currentIndexRef.current - 1);
     currentIndexRef.current = prev;
@@ -356,6 +500,7 @@ export function NarrationPlayer({
   };
 
   const handleNext = () => {
+    if (waiting) return;
     stopPreviousSource();
     const next = Math.min(items.length - 1, currentIndexRef.current + 1);
     currentIndexRef.current = next;
@@ -378,28 +523,34 @@ export function NarrationPlayer({
     <div className="fixed bottom-0 left-0 right-0 z-40 bg-ink-50 dark:bg-ink-900 border-t border-ink-200 dark:border-ink-800 shadow-lg animate-slide-up">
       <audio ref={audioRef} />
       <div className="max-w-3xl mx-auto px-4 py-3 flex items-center gap-3">
-        <button onClick={handlePrev} disabled={currentIndex <= 0} className="btn-ghost !p-2 disabled:opacity-30">
+        <button onClick={handlePrev} disabled={waiting || currentIndex <= 0} className="btn-ghost !p-2 disabled:opacity-30">
           <SkipBack size={18} />
         </button>
 
-        <button onClick={handlePlayPause} className="btn-primary !p-2.5 !rounded-full" style={{ minWidth: "44px" }}>
-          {loading ? <Loader2 size={18} className="animate-spin" /> : isPlaying ? <Pause size={18} /> : <Play size={18} />}
+        <button onClick={handlePlayPause} disabled={waiting} className="btn-primary !p-2.5 !rounded-full disabled:opacity-50" style={{ minWidth: "44px" }}>
+          {loading || waiting ? <Loader2 size={18} className="animate-spin" /> : isPlaying ? <Pause size={18} /> : <Play size={18} />}
         </button>
 
-        <button onClick={handleNext} disabled={currentIndex >= items.length - 1} className="btn-ghost !p-2 disabled:opacity-30">
+        <button onClick={handleNext} disabled={waiting || currentIndex >= items.length - 1} className="btn-ghost !p-2 disabled:opacity-30">
           <SkipForward size={18} />
         </button>
 
         <div className="flex-1 min-w-0 px-2">
-          <p className="text-xs font-sans text-ink-600 dark:text-ink-300 truncate">
-            {currentItem ? currentItem.plainText.slice(0, 80) + (currentItem.plainText.length > 80 ? "…" : "") : ""}
-          </p>
-          <p className="text-xs font-sans text-ink-400 mt-0.5">
-            {currentIndex + 1} / {items.length}
-            {usingBrowserTTS && " · browser voice"}
-            {currentPlayback?.mode === "manifest" && " · recorded"}
-            {currentPlayback?.mode === "api" && " · generated"}
-          </p>
+          {waiting ? (
+            <p className="text-xs font-sans text-ink-600 dark:text-ink-300">Loading next scene…</p>
+          ) : (
+            <>
+              <p className="text-xs font-sans text-ink-600 dark:text-ink-300 truncate">
+                {currentItem ? currentItem.plainText.slice(0, 80) + (currentItem.plainText.length > 80 ? "…" : "") : ""}
+              </p>
+              <p className="text-xs font-sans text-ink-400 mt-0.5">
+                {currentIndex + 1} / {items.length}
+                {usingBrowserTTS && " · browser voice"}
+                {currentPlayback?.mode === "manifest" && " · recorded"}
+                {currentPlayback?.mode === "api" && " · generated"}
+              </p>
+            </>
+          )}
         </div>
 
         <div className="flex items-center gap-1">
