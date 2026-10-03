@@ -13,6 +13,19 @@ const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY") ?? "";
 const MAX_CHARS = 2500;
 const MONTHLY_LIMIT = 50000;
 
+function jsonError(status: number, message: string) {
+  return new Response(JSON.stringify({ error: message }), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+function jsonResponse(data: Record<string, unknown>) {
+  return new Response(JSON.stringify(data), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 async function sha256(text: string): Promise<string> {
   const data = new TextEncoder().encode(text);
   const hash = await crypto.subtle.digest("SHA-256", data);
@@ -27,42 +40,36 @@ Deno.serve(async (req: Request) => {
   }
 
   if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), {
-      status: 405,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return jsonError(405, "Method not allowed");
   }
 
   try {
-    const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+    // Caller-authenticated client — used only to verify the user is signed in
+    const authClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
       auth: { persistSession: false },
       global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } },
     });
 
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await authClient.auth.getUser();
     if (!user) {
-      return new Response(JSON.stringify({ error: "Authentication required" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonError(401, "Authentication required");
     }
+
+    // Service-role client — bypasses RLS for storage upload + DB insert
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      auth: { persistSession: false },
+    });
 
     const { story_slug, text } = await req.json();
     if (!story_slug || typeof text !== "string") {
-      return new Response(JSON.stringify({ error: "story_slug and text are required" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonError(400, "story_slug and text are required");
     }
 
     if (text.length > MAX_CHARS) {
-      return new Response(JSON.stringify({ error: `Text exceeds ${MAX_CHARS} character limit` }), {
-        status: 413,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonError(413, `Text exceeds ${MAX_CHARS} character limit`);
     }
 
-    const { data: story } = await supabase
+    const { data: story } = await admin
       .from("stories")
       .select("settings")
       .eq("slug", story_slug)
@@ -70,33 +77,28 @@ Deno.serve(async (req: Request) => {
 
     const narration = (story as { settings?: { narration?: { voice_id: string; model_id: string } } })?.settings?.narration;
     if (!narration?.voice_id) {
-      return new Response(JSON.stringify({ error: "No narration configured for this story" }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonError(404, "No narration configured for this story");
     }
 
     const textHash = await sha256(`${narration.voice_id}|${narration.model_id}|${text}`);
     const clipPath = `${story_slug}/${textHash}.mp3`;
 
-    // Check if clip already exists in storage
-    const { data: existingFile } = await supabase.storage
+    // Check cache BEFORE calling ElevenLabs — try listing the file in storage
+    const { data: existingFile } = await admin.storage
       .from("narration")
       .list(story_slug, { search: `${textHash}.mp3` });
 
     if (existingFile && existingFile.length > 0) {
-      const { data: urlData } = supabase.storage
+      const { data: urlData } = admin.storage
         .from("narration")
         .getPublicUrl(clipPath);
-      return new Response(JSON.stringify({ url: urlData.publicUrl }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse({ url: urlData.publicUrl });
     }
 
     // Check monthly usage limit
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const { data: recentClips } = await supabase
+    const { data: recentClips } = await admin
       .from("narration_clips")
       .select("chars")
       .eq("story_slug", story_slug)
@@ -104,20 +106,14 @@ Deno.serve(async (req: Request) => {
 
     const totalChars = (recentClips ?? []).reduce((sum: number, c: { chars: number }) => sum + c.chars, 0);
     if (totalChars + text.length > MONTHLY_LIMIT) {
-      return new Response(JSON.stringify({ error: "Monthly narration limit exceeded for this story" }), {
-        status: 429,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonError(429, "Monthly narration limit exceeded for this story");
     }
 
     if (!ELEVENLABS_API_KEY) {
-      return new Response(JSON.stringify({ error: "ElevenLabs API key not configured" }), {
-        status: 503,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonError(503, "ElevenLabs API key not configured");
     }
 
-    // Generate TTS
+    // Generate TTS via ElevenLabs
     const ttsResp = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${narration.voice_id}?output_format=mp3_24000_48`,
       {
@@ -132,45 +128,42 @@ Deno.serve(async (req: Request) => {
 
     if (!ttsResp.ok) {
       const errText = await ttsResp.text();
-      return new Response(JSON.stringify({ error: `ElevenLabs API error: ${ttsResp.status} ${errText}` }), {
-        status: 502,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      console.error(`[narrate] ElevenLabs API error: ${ttsResp.status}`, errText);
+      return jsonError(502, `ElevenLabs API error: ${ttsResp.status}`);
     }
 
     const audioBuffer = await ttsResp.arrayBuffer();
 
-    // Upload to storage
-    const { error: uploadErr } = await supabase.storage
+    // Upload to storage with service-role client (bypasses RLS)
+    const { error: uploadErr } = await admin.storage
       .from("narration")
       .upload(clipPath, audioBuffer, { contentType: "audio/mpeg", upsert: false });
 
     if (uploadErr) {
-      return new Response(JSON.stringify({ error: `Storage upload failed: ${uploadErr.message}` }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      console.error("[narrate] Storage upload failed:", uploadErr.message);
+      return jsonError(500, `Storage upload failed: ${uploadErr.message}`);
     }
 
-    // Insert clip record
-    await supabase.from("narration_clips").insert({
+    // Insert clip record with service-role client (bypasses RLS)
+    const { error: insertErr } = await admin.from("narration_clips").insert({
       story_slug,
       text_hash: textHash,
       chars: text.length,
       created_by: user.id,
     });
 
-    const { data: urlData } = supabase.storage
+    if (insertErr) {
+      console.error("[narrate] Clip record insert failed:", insertErr.message);
+      // Audio was uploaded successfully; don't fail the whole request
+    }
+
+    const { data: urlData } = admin.storage
       .from("narration")
       .getPublicUrl(clipPath);
 
-    return new Response(JSON.stringify({ url: urlData.publicUrl }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return jsonResponse({ url: urlData.publicUrl });
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    console.error("[narrate] Unexpected error:", err);
+    return jsonError(500, err.message ?? "Internal server error");
   }
 });
