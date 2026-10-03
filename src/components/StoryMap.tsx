@@ -124,13 +124,14 @@ export function StoryMap({
           const targetPx = toPx(toScene?.map_x ?? fromNode.x, toScene?.map_y ?? fromNode.y + 1);
           let dx = targetPx.px - fromNode.px;
           let dy = targetPx.py - fromNode.py;
-          // Avoid pointing straight down (label area) — nudge to side
-          if (dy > 0 && Math.abs(dx) < 5) {
-            dx = fromNode.x <= 1 ? 1 : -1; // push to whichever side has room
-          }
-          const len = Math.sqrt(dx * dx + dy * dy) || 1;
-          const ux = dx / len;
-          const uy = dy / len;
+          // Constrain stub angle to upper half: -150° to -30° (screen coords)
+          // so "?" never overlaps the label below the dot
+          let angleDeg = Math.atan2(dy, dx) * 180 / Math.PI;
+          if (angleDeg > -30) angleDeg = -30;
+          if (angleDeg < -150) angleDeg = -150;
+          const angleRad = angleDeg * Math.PI / 180;
+          const ux = Math.cos(angleRad);
+          const uy = Math.sin(angleRad);
           // Start at dot edge
           const dotR = fromNode.isCurrent ? CURRENT_R : DOT_R;
           const startX = fromNode.px + ux * dotR;

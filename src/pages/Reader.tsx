@@ -104,7 +104,7 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
     setScene(currentScene);
     setChapters((chaptersRes.data as Chapter[]) ?? []);
     setVariants((variantsRes.data as Variant[]) ?? []);
-    setAllChoices((choicesRes.data as Choice[]) ?? []);
+    setAllChoices((allChoicesRes.data as Choice[]) ?? []);
     setAllScenes((scenesRes.data as Scene[]) ?? []);
     setSteps((stepsRes.data as Array<{ id: string; scene_key: string; choice_key: string | null; timeline: number }>) ?? []);
     setTallies((talliesRes.data as ChoiceTally[]) ?? []);
@@ -298,7 +298,7 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
     );
   }
 
-  const availableChoices = getAvailableChoices(allChoices, playthrough.flags, playthrough.timeline);
+  const availableChoices = getAvailableChoices(allChoices.filter((c) => c.scene_key === playthrough.current_scene_key), playthrough.flags, playthrough.timeline);
   const isCompleted = !!playthrough.completed_at;
   const accent = storySettings?.accent_color ?? "#c97b3a";
   const authToken = session?.access_token ?? import.meta.env.VITE_SUPABASE_ANON_KEY;
