@@ -37,6 +37,7 @@ export function NarrationPlayer({
 
   // Refs for segment tracking — read by event handlers without stale closures
   const segRef = useRef<NarrationPlayback | null>(null);
+  const loadedUrlRef = useRef<string | null>(null);
   const currentIndexRef = useRef(startIndex);
   const advancingRef = useRef(false);
   const speedRef = useRef(speed);
@@ -49,6 +50,8 @@ export function NarrationPlayer({
   useEffect(() => { itemsRef.current = items; }, [items]);
   useEffect(() => { manifestRef.current = manifest; }, [manifest]);
   useEffect(() => { manifestBaseUrlRef.current = manifestBaseUrl; }, [manifestBaseUrl]);
+
+  const playItemRef = useRef<(idx: number) => Promise<void>>(async () => {});
 
   const goToNext = useCallback(() => {
     if (advancingRef.current) return;
@@ -68,8 +71,6 @@ export function NarrationPlayer({
     void playItemRef.current(nextIdx);
   }, []);
 
-  const playItemRef = useRef<(idx: number) => Promise<void>>(async () => {});
-
   const playItem = useCallback(async (idx: number) => {
     const curItems = itemsRef.current;
     if (idx >= curItems.length) {
@@ -83,47 +84,68 @@ export function NarrationPlayer({
     setCurrentIndex(idx);
     currentIndexRef.current = idx;
 
-    const manifestPlayback = resolveNarration(item, manifestRef.current, manifestBaseUrlRef.current);
-    if (manifestPlayback) {
+    const next = resolveNarration(item, manifestRef.current, manifestBaseUrlRef.current);
+
+    if (next) {
       setLoading(false);
       setUsingBrowserTTS(false);
-      setCurrentPlayback(manifestPlayback);
-      segRef.current = manifestPlayback;
+
+      // Read the PREVIOUS segment before overwriting the ref
+      const prev = segRef.current;
+
+      // Now assign the new segment
+      segRef.current = next;
+      setCurrentPlayback(next);
 
       const audio = audioRef.current;
       if (!audio) return;
 
-      // Check if this is a continuation of the same file (no pause/seek needed)
-      const prevSeg = segRef.current;
-      const prevFile = prevSeg?.audioUrl;
-      const sameFile = prevFile && manifestPlayback.audioUrl === prevFile;
-
-      if (sameFile &&
-          prevSeg && prevSeg.end !== undefined && manifestPlayback.start !== undefined &&
-          Math.abs(manifestPlayback.start - prevSeg.end) < 0.15) {
-        // Same file, contiguous — just update segRef and highlight, let audio continue
+      // Contiguous fast-path: same file already loaded, currently playing, times align
+      if (prev && prev.audioUrl === next.audioUrl &&
+          loadedUrlRef.current === next.audioUrl &&
+          !audio.paused &&
+          prev.end !== undefined && next.start !== undefined &&
+          Math.abs(next.start - prev.end) < 0.15) {
         audio.playbackRate = speedRef.current;
         setIsPlaying(true);
         return;
       }
 
-      const urlChanged = !prevFile || manifestPlayback.audioUrl !== prevFile;
-      if (urlChanged && manifestPlayback.audioUrl) {
-        audio.src = manifestPlayback.audioUrl;
+      // Load a new file if needed
+      const needsLoad = loadedUrlRef.current !== next.audioUrl || !audio.currentSrc;
+      if (needsLoad && next.audioUrl) {
+        audio.src = next.audioUrl;
         await new Promise<void>((resolve) => {
           audio.oncanplay = () => resolve();
           audio.load();
         });
+        loadedUrlRef.current = next.audioUrl;
       }
+
       audio.playbackRate = speedRef.current;
-      if (manifestPlayback.start !== undefined) {
-        audio.currentTime = manifestPlayback.start;
+      if (next.start !== undefined) {
+        audio.currentTime = next.start;
       }
+
       try {
         await audio.play();
         setIsPlaying(true);
-      } catch {
-        setIsPlaying(false);
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") {
+          // Retry once after load completes
+          await new Promise<void>((resolve) => {
+            const handler = () => { audio.removeEventListener("canplay", handler); resolve(); };
+            audio.addEventListener("canplay", handler);
+          });
+          try {
+            await audio.play();
+            setIsPlaying(true);
+          } catch {
+            setIsPlaying(false);
+          }
+        } else {
+          setIsPlaying(false);
+        }
       }
       return;
     }
@@ -136,26 +158,44 @@ export function NarrationPlayer({
 
     if (url) {
       const apiPlayback: NarrationPlayback = { mode: "api", audioUrl: url, start: 0 };
-      setCurrentPlayback(apiPlayback);
       segRef.current = apiPlayback;
+      loadedUrlRef.current = url;
+      setCurrentPlayback(apiPlayback);
       const audio = audioRef.current;
       if (!audio) return;
       audio.src = url;
+      await new Promise<void>((resolve) => {
+        audio.oncanplay = () => resolve();
+        audio.load();
+      });
       audio.playbackRate = speedRef.current;
       audio.currentTime = 0;
       try {
         await audio.play();
         setIsPlaying(true);
-      } catch {
-        setIsPlaying(false);
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") {
+          await new Promise<void>((resolve) => {
+            const handler = () => { audio.removeEventListener("canplay", handler); resolve(); };
+            audio.addEventListener("canplay", handler);
+          });
+          try {
+            await audio.play();
+            setIsPlaying(true);
+          } catch {
+            setIsPlaying(false);
+          }
+        } else {
+          setIsPlaying(false);
+        }
       }
       return;
     }
 
     // Fallback: browser speech synthesis
     const ttsPlayback: NarrationPlayback = { mode: "tts" };
-    setCurrentPlayback(ttsPlayback);
     segRef.current = ttsPlayback;
+    setCurrentPlayback(ttsPlayback);
     setUsingBrowserTTS(true);
     setIsPlaying(true);
     speakViaBrowser(item.plainText);
@@ -188,6 +228,8 @@ export function NarrationPlayer({
           const nextSeg = resolveNarration(nextItem, manifestRef.current, manifestBaseUrlRef.current);
           if (nextSeg && nextSeg.mode === "manifest" &&
               nextSeg.audioUrl === seg.audioUrl &&
+              nextSeg.audioUrl === loadedUrlRef.current &&
+              !audio.paused &&
               nextSeg.start !== undefined &&
               Math.abs(nextSeg.start - seg.end) < 0.15) {
             // Contiguous in same file — don't pause, just advance segRef
@@ -272,6 +314,7 @@ export function NarrationPlayer({
     setIsPlaying(false);
     setCurrentPlayback(null);
     segRef.current = null;
+    loadedUrlRef.current = null;
     onClose();
   };
 
