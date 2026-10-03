@@ -135,53 +135,71 @@ export function StoryMap({
     });
   }
 
-  // 3. Build fog stubs — angle away from label side
+  // 3. Build fog stubs — "roads not taken" on past scenes only
   const stubExits: StubExit[] = [];
   if (mapMode === "fog") {
     const allSceneKeys = new Set(scenes.map((s) => s.key));
+    // Track which choice was taken at each scene
+    const takenChoiceByScene = new Map<string, string>();
+    for (const step of steps) {
+      if (step.choice_key) takenChoiceByScene.set(step.scene_key, step.choice_key);
+    }
+
     for (const scene of scenes) {
+      // Skip current scene — its choices are already shown on the page
+      if (scene.key === currentSceneKey) continue;
       if (!reachedScenes.has(scene.key)) continue;
       const fromNode = nodeMap.get(scene.key);
       if (!fromNode) continue;
-      const sceneChoices = choices.filter((c) => c.scene_key === scene.key);
-      for (const choice of sceneChoices) {
-        if (!reachedScenes.has(choice.to_scene_key) && allSceneKeys.has(choice.to_scene_key)) {
-          const toScene = scenes.find((s) => s.key === choice.to_scene_key);
-          const targetPx = toPx(toScene?.map_x ?? fromNode.x, toScene?.map_y ?? fromNode.y + 1);
-          let dx = targetPx.px - fromNode.px;
-          let dy = targetPx.py - fromNode.py;
 
-          // Constrain stub angle to avoid label side
-          // Label on right → stubs go left (up-left / down-left): -150° to -30°
-          // Label on left → stubs go right (up-right / down-right): -30° to -150° mirrored → -150° to -30° offset
-          let angleDeg = Math.atan2(dy, dx) * 180 / Math.PI;
-          if (fromNode.labelSide === "right") {
-            // Stubs point left: constrain to -150°..-30° (upper-left quadrant)
-            if (angleDeg > -30) angleDeg = -30;
-            if (angleDeg < -150) angleDeg = -150;
-          } else {
-            // Stubs point right: constrain to -30°..-150° mirrored → upper-right
-            // -30° to -150° but on the right side: angles between -150° and -30° but with positive x
-            // Right side means cos(angle) > 0, so angle between -60° and 60°
-            // But we want upward/sideways: constrain to -60°..-120° won't work on right
-            // Actually: up-right is -45°, down-right is 45°. We want upper half so -150° to -30°
-            // but shifted right. For label on left, stubs should go right: angle between -60° and 60° but upward only
-            // Let's constrain to -120° to -60° → points up and to the right
-            if (angleDeg > -60) angleDeg = -60;
-            if (angleDeg < -120) angleDeg = -120;
-          }
-          const angleRad = angleDeg * Math.PI / 180;
-          const ux = Math.cos(angleRad);
-          const uy = Math.sin(angleRad);
-          const dotR = fromNode.dotR;
-          const startX = fromNode.px + ux * dotR;
-          const startY = fromNode.py + uy * dotR;
-          const endX = fromNode.px + ux * (STUB_LEN + dotR);
-          const endY = fromNode.py + uy * (STUB_LEN + dotR);
-          const qX = endX + ux * 8;
-          const qY = endY + uy * 8 + 4;
-          stubExits.push({ fromKey: scene.key, startX, startY, endX, endY, qX, qY });
+      const sceneChoices = choices.filter((c) => c.scene_key === scene.key);
+      const untaken = sceneChoices.filter(
+        (c) => c.key !== takenChoiceByScene.get(scene.key)
+          && !reachedScenes.has(c.to_scene_key)
+          && allSceneKeys.has(c.to_scene_key)
+      );
+
+      // Compute base angle for each untaken stub
+      const angleSpecs = untaken.map((choice) => {
+        const toScene = scenes.find((s) => s.key === choice.to_scene_key);
+        const targetPx = toPx(toScene?.map_x ?? fromNode.x, toScene?.map_y ?? fromNode.y + 1);
+        const dx = targetPx.px - fromNode.px;
+        const dy = targetPx.py - fromNode.py;
+        let angleDeg = Math.atan2(dy, dx) * 180 / Math.PI;
+
+        // Constrain to avoid label side
+        if (fromNode.labelSide === "right") {
+          if (angleDeg > -30) angleDeg = -30;
+          if (angleDeg < -150) angleDeg = -150;
+        } else {
+          if (angleDeg > -60) angleDeg = -60;
+          if (angleDeg < -120) angleDeg = -120;
         }
+        return { choice, angleDeg };
+      });
+
+      // Fan out stubs that point the same way: sort by angle, nudge 25° apart
+      angleSpecs.sort((a, b) => a.angleDeg - b.angleDeg);
+      for (let i = 1; i < angleSpecs.length; i++) {
+        const prev = angleSpecs[i - 1].angleDeg;
+        const curr = angleSpecs[i].angleDeg;
+        if (curr - prev < 25) {
+          angleSpecs[i].angleDeg = prev + 25;
+        }
+      }
+
+      for (const { angleDeg } of angleSpecs) {
+        const angleRad = angleDeg * Math.PI / 180;
+        const ux = Math.cos(angleRad);
+        const uy = Math.sin(angleRad);
+        const dotR = fromNode.dotR;
+        const startX = fromNode.px + ux * dotR;
+        const startY = fromNode.py + uy * dotR;
+        const endX = fromNode.px + ux * (STUB_LEN + dotR);
+        const endY = fromNode.py + uy * (STUB_LEN + dotR);
+        const qX = endX + ux * 8;
+        const qY = endY + uy * 8 + 4;
+        stubExits.push({ fromKey: scene.key, startX, startY, endX, endY, qX, qY });
       }
     }
   }
