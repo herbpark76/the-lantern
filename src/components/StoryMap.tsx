@@ -16,17 +16,17 @@ interface StoryMapProps {
   onToggle: () => void;
 }
 
-const GRID_X_SPACING = 90;
-const GRID_Y_SPACING = 70;
-const VIEWBOX_PAD = 28;
-const STUB_LEN = 32;
-const DOT_R = 7;
-const CURRENT_R = 9;
-const LABEL_FONT_SIZE = 12;
+const GRID_X_SPACING = 70;
+const GRID_Y_SPACING = 48;
+const VIEWBOX_PAD = 24;
+const DOT_R = 4;
+const CURRENT_R = 5;
+const RING_R = 9;
+const LABEL_FONT_SIZE = 11;
 const LABEL_MAX_CHARS = 16;
-const STUB_FONT_SIZE = 13;
-const LABEL_OFFSET = 12;
+const LABEL_OFFSET = 9;
 const HALO_WIDTH = 4;
+const COUNT_FONT_SIZE = 10;
 
 function truncate(text: string, max: number): string {
   return text.length > max ? text.slice(0, max - 1) + "…" : text;
@@ -47,6 +47,7 @@ interface GridNode {
   labelY: number;
   labelAnchor: "start" | "end";
   dotR: number;
+  untakenCount: number;
 }
 
 interface PathSegment {
@@ -58,16 +59,6 @@ interface PathSegment {
   toY: number;
   timeline: number;
   isLoop: boolean;
-}
-
-interface StubExit {
-  fromKey: string;
-  startX: number;
-  startY: number;
-  endX: number;
-  endY: number;
-  qX: number;
-  qY: number;
 }
 
 export function StoryMap({
@@ -85,25 +76,41 @@ export function StoryMap({
     py: gy * GRID_Y_SPACING,
   });
 
-  // Compute viewBox bounds so we can decide label side
   const allPxVals = scenesWithCoords.map((s) => toPx(s.map_x ?? 0, s.map_y ?? 0).px);
   const globalMinX = allPxVals.length > 0 ? Math.min(...allPxVals) : 0;
   const globalMaxX = allPxVals.length > 0 ? Math.max(...allPxVals) : 100;
   const globalSpanX = globalMaxX - globalMinX || 1;
   const rightThirdX = globalMinX + globalSpanX * (2 / 3);
 
-  // 1. Build all nodes with label placement
+  const takenChoiceByScene = new Map<string, string>();
+  for (const step of steps) {
+    if (step.choice_key) takenChoiceByScene.set(step.scene_key, step.choice_key);
+  }
+  const allSceneKeys = new Set(scenes.map((s) => s.key));
+
+  // 1. Build all nodes with label placement + untaken count
   const allNodes: GridNode[] = scenesWithCoords.map((s) => {
     const { px, py } = toPx(s.map_x ?? 0, s.map_y ?? 0);
     const dotR = s.key === currentSceneKey ? CURRENT_R : DOT_R;
     const labelSide: "left" | "right" = px >= rightThirdX ? "left" : "right";
     const labelX = labelSide === "right" ? px + LABEL_OFFSET : px - LABEL_OFFSET;
     const labelAnchor: "start" | "end" = labelSide === "right" ? "start" : "end";
+
+    let untakenCount = 0;
+    if (s.key !== currentSceneKey && reachedScenes.has(s.key)) {
+      const sceneChoices = choices.filter((c) => c.scene_key === s.key);
+      untakenCount = sceneChoices.filter(
+        (c) => c.key !== takenChoiceByScene.get(s.key)
+          && !reachedScenes.has(c.to_scene_key)
+          && allSceneKeys.has(c.to_scene_key)
+      ).length;
+    }
+
     return {
       key: s.key, title: s.title, x: s.map_x ?? 0, y: s.map_y ?? 0,
       isEnding: s.is_ending, isCurrent: s.key === currentSceneKey,
       reached: reachedScenes.has(s.key), px, py,
-      labelSide, labelX, labelY: py, labelAnchor, dotR,
+      labelSide, labelX, labelY: py, labelAnchor, dotR, untakenCount,
     };
   });
 
@@ -135,79 +142,10 @@ export function StoryMap({
     });
   }
 
-  // 3. Build fog stubs — "roads not taken" on past scenes only
-  const stubExits: StubExit[] = [];
-  if (mapMode === "fog") {
-    const allSceneKeys = new Set(scenes.map((s) => s.key));
-    // Track which choice was taken at each scene
-    const takenChoiceByScene = new Map<string, string>();
-    for (const step of steps) {
-      if (step.choice_key) takenChoiceByScene.set(step.scene_key, step.choice_key);
-    }
-
-    for (const scene of scenes) {
-      // Skip current scene — its choices are already shown on the page
-      if (scene.key === currentSceneKey) continue;
-      if (!reachedScenes.has(scene.key)) continue;
-      const fromNode = nodeMap.get(scene.key);
-      if (!fromNode) continue;
-
-      const sceneChoices = choices.filter((c) => c.scene_key === scene.key);
-      const untaken = sceneChoices.filter(
-        (c) => c.key !== takenChoiceByScene.get(scene.key)
-          && !reachedScenes.has(c.to_scene_key)
-          && allSceneKeys.has(c.to_scene_key)
-      );
-
-      // Compute base angle for each untaken stub
-      const angleSpecs = untaken.map((choice) => {
-        const toScene = scenes.find((s) => s.key === choice.to_scene_key);
-        const targetPx = toPx(toScene?.map_x ?? fromNode.x, toScene?.map_y ?? fromNode.y + 1);
-        const dx = targetPx.px - fromNode.px;
-        const dy = targetPx.py - fromNode.py;
-        let angleDeg = Math.atan2(dy, dx) * 180 / Math.PI;
-
-        // Constrain to avoid label side
-        if (fromNode.labelSide === "right") {
-          if (angleDeg > -30) angleDeg = -30;
-          if (angleDeg < -150) angleDeg = -150;
-        } else {
-          if (angleDeg > -60) angleDeg = -60;
-          if (angleDeg < -120) angleDeg = -120;
-        }
-        return { choice, angleDeg };
-      });
-
-      // Fan out stubs that point the same way: sort by angle, nudge 25° apart
-      angleSpecs.sort((a, b) => a.angleDeg - b.angleDeg);
-      for (let i = 1; i < angleSpecs.length; i++) {
-        const prev = angleSpecs[i - 1].angleDeg;
-        const curr = angleSpecs[i].angleDeg;
-        if (curr - prev < 25) {
-          angleSpecs[i].angleDeg = prev + 25;
-        }
-      }
-
-      for (const { angleDeg } of angleSpecs) {
-        const angleRad = angleDeg * Math.PI / 180;
-        const ux = Math.cos(angleRad);
-        const uy = Math.sin(angleRad);
-        const dotR = fromNode.dotR;
-        const startX = fromNode.px + ux * dotR;
-        const startY = fromNode.py + uy * dotR;
-        const endX = fromNode.px + ux * (STUB_LEN + dotR);
-        const endY = fromNode.py + uy * (STUB_LEN + dotR);
-        const qX = endX + ux * 8;
-        const qY = endY + uy * 8 + 4;
-        stubExits.push({ fromKey: scene.key, startX, startY, endX, endY, qX, qY });
-      }
-    }
-  }
-
-  // 4. Visible nodes: reached scenes only
+  // 3. Visible nodes: reached scenes only
   const visibleNodes = allNodes.filter((n) => n.reached);
 
-  // 5. Resolve vertical label collisions — nudge overlapping labels apart
+  // 4. Resolve vertical label collisions
   const MIN_LABEL_GAP = LABEL_FONT_SIZE + 4;
   const sortedByY = [...visibleNodes].sort((a, b) => a.labelY - b.labelY);
   for (let i = 1; i < sortedByY.length; i++) {
@@ -218,30 +156,26 @@ export function StoryMap({
     }
   }
 
-  // 6. Compute viewBox from visible nodes + stub endpoints + label space
+  // 5. Compute fixed-size map bounds (content extent, NOT zoom-to-fit)
   const fitPoints: Array<{ x: number; y: number }> = [];
   for (const n of visibleNodes) {
     fitPoints.push({ x: n.px, y: n.py });
     fitPoints.push({ x: n.labelX, y: n.labelY });
     fitPoints.push({ x: n.labelX + (n.labelSide === "right" ? LABEL_MAX_CHARS * 3.5 : -LABEL_MAX_CHARS * 3.5), y: n.labelY });
     fitPoints.push({ x: n.px, y: n.py + n.dotR + 6 });
-    fitPoints.push({ x: n.px, y: n.py - n.dotR - 6 });
-  }
-  for (const s of stubExits) {
-    fitPoints.push({ x: s.endX, y: s.endY });
-    fitPoints.push({ x: s.qX, y: s.qY });
+    fitPoints.push({ x: n.px, y: n.py - n.dotR - 12 });
   }
   if (fitPoints.length === 0) {
     fitPoints.push({ x: 0, y: 0 }, { x: 100, y: 100 });
   }
-  const fitMinX = Math.min(...fitPoints.map((p) => p.x)) - VIEWBOX_PAD;
-  const fitMaxX = Math.max(...fitPoints.map((p) => p.x)) + VIEWBOX_PAD;
-  const fitMinY = Math.min(...fitPoints.map((p) => p.y)) - VIEWBOX_PAD;
-  const fitMaxY = Math.max(...fitPoints.map((p) => p.y)) + VIEWBOX_PAD;
-  const vbW = Math.max(fitMaxX - fitMinX, 100);
-  const vbH = Math.max(fitMaxY - fitMinY, 100);
+  const mapMinX = Math.min(...fitPoints.map((p) => p.x)) - VIEWBOX_PAD;
+  const mapMaxX = Math.max(...fitPoints.map((p) => p.x)) + VIEWBOX_PAD;
+  const mapMinY = Math.min(...fitPoints.map((p) => p.y)) - VIEWBOX_PAD;
+  const mapMaxY = Math.max(...fitPoints.map((p) => p.y)) + VIEWBOX_PAD;
+  const mapW = Math.max(mapMaxX - mapMinX, 50);
+  const mapH = Math.max(mapMaxY - mapMinY, 50);
 
-  // 7. Group choices by timeline
+  // 6. Group choices by timeline
   const tlMap = new Map<number, Array<{ label: string; sceneKey: string }>>();
   for (const step of steps) {
     if (!step.choice_key) continue;
@@ -258,7 +192,6 @@ export function StoryMap({
   const sceneRecapSteps = (sceneKey: string) => steps.filter((s) => s.scene_key === sceneKey);
   const recapSceneData = recapScene ? scenes.find((s) => s.key === recapScene) : null;
 
-  // Loop path: curve along the right edge
   const loopPath = (seg: PathSegment) => {
     const rightX = Math.max(seg.fromX, seg.toX) + 40;
     return `M ${seg.fromX} ${seg.fromY} C ${rightX} ${seg.fromY}, ${rightX} ${seg.toY}, ${seg.toX} ${seg.toY}`;
@@ -275,85 +208,95 @@ export function StoryMap({
         </button>
       </div>
 
-      <svg viewBox={`${fitMinX} ${fitMinY} ${vbW} ${vbH}`} className="w-full h-auto" style={{ maxHeight: "55vh" }}>
-        {/* Layer 1: Path lines */}
-        {pathSegments.map((seg, i) => {
-          const isCurrentTl = seg.timeline === currentTimeline;
-          const color = isCurrentTl ? accentColor : "#9a958c";
-          const opacity = isCurrentTl ? 1 : 0.5;
-          if (seg.isLoop) {
+      {/* Fixed-scale SVG: 1 SVG unit = 1 CSS px, centered horizontally */}
+      <div className="flex justify-center">
+        <svg
+          viewBox={`${mapMinX} ${mapMinY} ${mapW} ${mapH}`}
+          width={mapW}
+          height={mapH}
+          style={{ flexShrink: 0 }}
+        >
+          {/* Layer 1: Path lines */}
+          {pathSegments.map((seg, i) => {
+            const isCurrentTl = seg.timeline === currentTimeline;
+            const color = isCurrentTl ? accentColor : "#9a958c";
+            const opacity = isCurrentTl ? 1 : 0.5;
+            if (seg.isLoop) {
+              return (
+                <path key={`path-${i}`} d={loopPath(seg)} fill="none" stroke={color}
+                  strokeWidth={1.5} opacity={opacity} strokeLinecap="round" />
+              );
+            }
             return (
-              <path key={`path-${i}`} d={loopPath(seg)} fill="none" stroke={color}
-                strokeWidth={2} opacity={opacity} strokeLinecap="round" />
+              <line key={`path-${i}`} x1={seg.fromX} y1={seg.fromY} x2={seg.toX} y2={seg.toY}
+                stroke={color} strokeWidth={1.5} opacity={opacity} strokeLinecap="round" />
             );
-          }
-          return (
-            <line key={`path-${i}`} x1={seg.fromX} y1={seg.fromY} x2={seg.toX} y2={seg.toY}
-              stroke={color} strokeWidth={2} opacity={opacity} strokeLinecap="round" />
-          );
-        })}
+          })}
 
-        {/* Layer 2: Fog stubs */}
-        {stubExits.map((stub, i) => (
-          <g key={`stub-${i}`}>
-            <line x1={stub.startX} y1={stub.startY} x2={stub.endX} y2={stub.endY}
-              stroke="currentColor" strokeWidth={1.5} strokeDasharray="4,3" opacity={0.6}
-              className="text-ink-500 dark:text-ink-400" />
-            <text x={stub.qX} y={stub.qY} textAnchor="middle" fill="currentColor"
-              fontSize={STUB_FONT_SIZE} opacity={0.6}
-              className="text-ink-500 dark:text-ink-400">?</text>
-          </g>
-        ))}
+          {/* Layer 2: Dots */}
+          {visibleNodes.map((node) => {
+            const r = node.dotR;
+            const fill = node.isCurrent ? accentColor : "#5c5447";
+            return (
+              <g key={node.key}>
+                {node.isCurrent && (
+                  <circle cx={node.px} cy={node.py} r={RING_R} fill={accentColor} opacity={0.15} />
+                )}
+                <circle cx={node.px} cy={node.py} r={r} fill={fill}
+                  style={{ cursor: "pointer" }} onClick={() => setRecapScene(node.key)} />
+              </g>
+            );
+          })}
 
-        {/* Layer 3: Dots */}
-        {visibleNodes.map((node) => {
-          const r = node.dotR;
-          const fill = node.isCurrent ? accentColor : node.isEnding ? accentColor : "#5c5447";
-          return (
-            <g key={node.key}>
-              {node.isCurrent && (
-                <circle cx={node.px} cy={node.py} r={r + 6} fill={accentColor}
-                  opacity={0.18} className="animate-pulse" />
-              )}
-              <circle cx={node.px} cy={node.py} r={r} fill={fill}
-                style={{ cursor: "pointer" }} onClick={() => setRecapScene(node.key)} />
-              {node.isEnding && (
-                <circle cx={node.px} cy={node.py} r={r + 3} fill="none"
-                  stroke={accentColor} strokeWidth={1.5} opacity={0.5} />
-              )}
-            </g>
-          );
-        })}
+          {/* Layer 3: Labels on top with halo */}
+          {visibleNodes.map((node) => {
+            const label = truncate(node.title, LABEL_MAX_CHARS);
+            return (
+              <text
+                key={`label-${node.key}`}
+                x={node.labelX}
+                y={node.labelY + LABEL_FONT_SIZE * 0.35}
+                textAnchor={node.labelAnchor}
+                fill="currentColor"
+                fontSize={LABEL_FONT_SIZE}
+                opacity={0.7}
+                className="text-ink-600 dark:text-ink-400 font-sans"
+                style={{
+                  pointerEvents: "none",
+                  userSelect: "none",
+                  fontWeight: node.isCurrent ? 600 : 400,
+                  paintOrder: "stroke",
+                  stroke: "var(--map-bg)",
+                  strokeWidth: HALO_WIDTH,
+                  strokeLinejoin: "round",
+                }}
+                dominantBaseline="middle"
+              >
+                {label}
+              </text>
+            );
+          })}
 
-        {/* Layer 4: Labels on top with halo */}
-        {visibleNodes.map((node) => {
-          const label = truncate(node.title, LABEL_MAX_CHARS);
-          return (
+          {/* Layer 4: "+N" count markers above-left of dot */}
+          {visibleNodes.filter((n) => n.untakenCount > 0).map((node) => (
             <text
-              key={`label-${node.key}`}
-              x={node.labelX}
-              y={node.labelY + LABEL_FONT_SIZE * 0.35}
-              textAnchor={node.labelAnchor}
+              key={`count-${node.key}`}
+              x={node.px - DOT_R - 2}
+              y={node.py - DOT_R - 2}
+              textAnchor="end"
               fill="currentColor"
-              fontSize={LABEL_FONT_SIZE}
-              opacity={0.85}
-              className="text-ink-600 dark:text-ink-400 font-sans"
-              style={{
-                pointerEvents: "none",
-                userSelect: "none",
-                fontWeight: node.isCurrent ? 600 : 400,
-                paintOrder: "stroke",
-                stroke: "var(--map-bg)",
-                strokeWidth: HALO_WIDTH,
-                strokeLinejoin: "round",
-              }}
+              fontSize={COUNT_FONT_SIZE}
+              opacity={0.5}
+              className="text-ink-500 dark:text-ink-400 font-sans"
+              style={{ pointerEvents: "auto", cursor: "default" }}
               dominantBaseline="middle"
             >
-              {label}
+              <title>{`${node.untakenCount} road${node.untakenCount > 1 ? "s" : ""} not taken`}</title>
+              +{node.untakenCount}
             </text>
-          );
-        })}
-      </svg>
+          ))}
+        </svg>
+      </div>
 
       {/* Legend */}
       <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-500 dark:text-ink-500 font-sans">
@@ -364,10 +307,7 @@ export function StoryMap({
           <span className="w-2.5 h-2.5 rounded-full bg-ink-600" />Reached
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full border border-ink-400" style={{ background: "transparent" }} />Ending
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="text-ink-400">- - ?</span>Unknown
+          <span className="text-ink-400 text-[10px]">+N</span>Roads not taken
         </div>
       </div>
 
