@@ -472,6 +472,7 @@ function PreviewTab({ slug }: { slug: string }) {
   const [sceneNote, setSceneNote] = useState("");
   const [bibleNote, setBibleNote] = useState<{ key: string; name: string } | null>(null);
   const [bibleNoteText, setBibleNoteText] = useState("");
+  const [renderedChapters, setRenderedChapters] = useState<Array<{ number: number; title: string; html: string }>>([]);
 
   useEffect(() => {
     Promise.all([
@@ -489,6 +490,20 @@ function PreviewTab({ slug }: { slug: string }) {
       setLoading(false);
     });
   }, [slug]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const base = renderChapters(chapters, variants, flags, timeline, 0);
+    (async () => {
+      const rendered = [];
+      for (const ch of base) {
+        const html = await markdownToHtml(ch.html);
+        rendered.push({ ...ch, html });
+      }
+      if (!cancelled) setRenderedChapters(rendered);
+    })();
+    return () => { cancelled = true; };
+  }, [chapters, variants, flags, timeline]);
 
   useEffect(() => {
     if (!selectedScene) return;
@@ -564,10 +579,6 @@ function PreviewTab({ slug }: { slug: string }) {
   if (loading) return <div className="flex justify-center py-12"><Loader2 size={20} className="animate-spin text-ink-400" /></div>;
 
   const accent = story?.settings?.accent_color ?? "#c97b3a";
-  const renderedChapters = renderChapters(chapters, variants, flags, timeline, 0).map((ch) => ({
-    ...ch,
-    html: markdownToHtml(ch.html),
-  }));
   const availableChoices = getAvailableChoices(choices, flags, timeline);
 
   const handleTextSelection = () => {
@@ -1048,6 +1059,7 @@ function DirectorsTab({ slug, profile }: { slug: string; profile: Profile | null
   const [savedText, setSavedText] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [renderedChapters, setRenderedChapters] = useState<Array<{ number: number; title: string; html: string }>>([]);
 
   useEffect(() => {
     Promise.all([
@@ -1075,6 +1087,20 @@ function DirectorsTab({ slug, profile }: { slug: string; profile: Profile | null
     });
   }, [slug, currentSceneKey]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const base = renderChapters(chapters, variants, flags, timeline, 0);
+    (async () => {
+      const rendered = [];
+      for (const ch of base) {
+        const html = await markdownToHtml(ch.html);
+        rendered.push({ ...ch, html });
+      }
+      if (!cancelled) setRenderedChapters(rendered);
+    })();
+    return () => { cancelled = true; };
+  }, [chapters, variants, flags, timeline]);
+
   if (loading) return <div className="flex justify-center py-12"><Loader2 size={20} className="animate-spin text-ink-400" /></div>;
 
   const currentScene = scenes.find((s) => s.key === currentSceneKey);
@@ -1084,11 +1110,6 @@ function DirectorsTab({ slug, profile }: { slug: string; profile: Profile | null
     timeline
   );
   const isEnding = currentScene?.is_ending ?? false;
-
-  const renderedChapters = renderChapters(chapters, variants, flags, timeline, 0).map((ch) => ({
-    ...ch,
-    html: markdownToHtml(ch.html),
-  }));
 
   const handleChoose = (choice: Choice) => {
     setPath((p) => [...p, choice.key]);

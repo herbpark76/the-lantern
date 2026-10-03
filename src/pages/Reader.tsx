@@ -149,18 +149,26 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
   // Render chapters when data changes
   useEffect(() => {
     if (!scene || !playthrough) return;
-    const rendered = renderChapters(
+    let cancelled = false;
+    const baseChapters = renderChapters(
       chapters,
       variants,
       playthrough.flags,
       playthrough.timeline,
       chapterOffset
-    ).map((ch) => ({ ...ch, html: markdownToHtml(ch.html) }));
-    setRenderedChapters(rendered);
-
-    // Build narration items for the player
-    narrationItemsRef.current = extractNarrationItems(rendered);
-    setHighlightedIndex(null);
+    );
+    (async () => {
+      const rendered = [];
+      for (const ch of baseChapters) {
+        const html = await markdownToHtml(ch.html);
+        rendered.push({ ...ch, html });
+      }
+      if (cancelled) return;
+      setRenderedChapters(rendered);
+      narrationItemsRef.current = extractNarrationItems(rendered);
+      setHighlightedIndex(null);
+    })();
+    return () => { cancelled = true; };
   }, [chapters, variants, playthrough, chapterOffset, scene]);
 
   // Persist listen/speed
@@ -306,9 +314,11 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
 
         {/* Scene title */}
         <div className="mb-8" style={{ borderTopWidth: "2px", borderTopColor: accent }}>
-          <p className="text-xs font-sans uppercase tracking-widest text-ink-400 mt-3 mb-1">
-            Act {scene.act} · Scene
-          </p>
+          {scene.slug && (
+            <p className="text-xs font-sans uppercase tracking-widest text-ink-400 mt-3 mb-1">
+              {scene.slug}
+            </p>
+          )}
           <h1 className="font-serif text-2xl text-ink-900 dark:text-ink-50">{scene.title}</h1>
         </div>
 

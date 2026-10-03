@@ -60,6 +60,7 @@ interface SceneFrontmatter {
   key: string;
   title: string;
   act: number;
+  slug?: string;
   is_bottleneck: boolean;
   is_ending: boolean;
   reads_flags: string[];
@@ -180,6 +181,7 @@ function normalizeScene(raw: Record<string, unknown>): SceneFrontmatter {
     key: String(raw.key ?? ""),
     title: String(raw.title ?? ""),
     act: Number(raw.act ?? 1),
+    slug: typeof raw.slug === "string" ? raw.slug : undefined,
     is_bottleneck: Boolean(raw.is_bottleneck ?? false),
     is_ending: Boolean(raw.is_ending ?? false),
     reads_flags: asStringArray(raw.reads_flags),
@@ -401,6 +403,7 @@ async function syncStory(slug: string, supabase: ReturnType<typeof createClient>
       key: fm.key,
       title: fm.title,
       act: fm.act,
+      slug: fm.slug ?? null,
       is_bottleneck: fm.is_bottleneck,
       is_ending: fm.is_ending,
       reads_flags: fm.reads_flags,

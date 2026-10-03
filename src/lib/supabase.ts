@@ -45,6 +45,7 @@ export interface Scene {
   key: string;
   title: string;
   act: number;
+  slug: string | null;
   is_bottleneck: boolean;
   is_ending: boolean;
   reads_flags: string[];

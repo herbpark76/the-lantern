@@ -108,4 +108,29 @@
     @apply hover:border-ink-300 dark:hover:border-ink-700;
     @apply hover:shadow-md;
   }
+
+  .prose-reader .drawing {
+    @apply mx-auto my-2;
+    max-width: 340px;
+    text-align: center;
+  }
+
+  .prose-reader .drawing svg,
+  .prose-reader .drawing img {
+    @apply mx-auto;
+    width: 100%;
+    height: auto;
+    color: inherit;
+  }
+
+  .prose-reader .drawing .drawing-caption {
+    @apply mt-2 text-sm text-ink-500 dark:text-ink-400;
+    font-family: "Caveat", cursive;
+  }
+
+  @media (max-width: 640px) {
+    .prose-reader .drawing {
+      max-width: 80%;
+    }
+  }
 }

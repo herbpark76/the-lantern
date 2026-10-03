@@ -58,20 +58,60 @@ export function renderChapters(
   return result;
 }
 
-export function markdownToHtml(md: string): string {
+const svgCache = new Map<string, string>();
+
+async function fetchSvg(url: string): Promise<string> {
+  if (svgCache.has(url)) return svgCache.get(url)!;
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) return "";
+    const text = await resp.text();
+    const svgMatch = text.match(/<svg[\s\S]*?<\/svg>/i);
+    if (svgMatch) {
+      svgCache.set(url, svgMatch[0]);
+      return svgMatch[0];
+    }
+    return "";
+  } catch {
+    return "";
+  }
+}
+
+export async function markdownToHtml(md: string): Promise<string> {
   let html = md;
   html = html.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   html = html.replace(/^### (.+)$/gm, '<h3 class="text-lg font-serif text-ink-800 dark:text-ink-200 mt-4 mb-2">$1</h3>');
   html = html.replace(/^## (.+)$/gm, '<h2 class="chapter-title">$1</h2>');
   html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
   html = html.replace(/\*(.+?)\*/g, "<em>$1</em>");
-  html = html.split(/\n\n+/).map((para) => {
-    const trimmed = para.trim();
-    if (!trimmed) return "";
-    if (trimmed.startsWith("<h")) return trimmed;
-    return `<p>${trimmed.replace(/\n/g, "<br/>")}</p>`;
-  }).join("\n");
-  return html;
+
+  const blocks = html.split(/\n\n+/);
+  const parts: string[] = [];
+
+  for (const block of blocks) {
+    const trimmed = block.trim();
+    if (!trimmed) continue;
+    if (trimmed.startsWith("<h")) { parts.push(trimmed); continue; }
+
+    const imgMatch = trimmed.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
+    if (imgMatch) {
+      const alt = imgMatch[1];
+      const src = imgMatch[2];
+      if (src.endsWith(".svg") && src.includes("/drawings/")) {
+        const svg = await fetchSvg(src);
+        if (svg) {
+          parts.push(`<figure class="drawing">${svg}</figure>`);
+          continue;
+        }
+      }
+      parts.push(`<figure class="drawing"><img src="${src}" alt="${alt}" /></figure>`);
+      continue;
+    }
+
+    parts.push(`<p>${trimmed.replace(/\n/g, "<br/>")}</p>`);
+  }
+
+  return parts.join("\n");
 }
 
 export function getAvailableChoices(

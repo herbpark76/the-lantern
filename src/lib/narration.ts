@@ -55,9 +55,10 @@ export function extractNarrationItems(
         itemIndex: items.length,
       });
     }
-    const paras = ch.html.split(/<p>/).slice(1);
-    for (const para of paras) {
-      const rawHtml = para.replace(/<\/p>/, "");
+    const blockRegex = /<p>([\s\S]*?)<\/p>/g;
+    let pMatch: RegExpExecArray | null;
+    while ((pMatch = blockRegex.exec(ch.html)) !== null) {
+      const rawHtml = pMatch[1];
       const plain = htmlToPlainText(rawHtml);
       if (plain) {
         items.push({
