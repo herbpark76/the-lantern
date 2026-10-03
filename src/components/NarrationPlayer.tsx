@@ -298,10 +298,21 @@ export function NarrationPlayer({
     };
   }, [goToNext, onHighlight]);
 
-  // Start playing on mount
+  // Start playing on mount, and jump when the user taps a paragraph
+  // (startIndex changes but currentIndexRef hasn't, so they differ).
+  // When the player itself advances and calls onHighlight, the parent feeds
+  // the same index back as startIndex — currentIndexRef already matches, so we skip.
+  const mountedRef = useRef(false);
   useEffect(() => {
-    playItem(startIndex);
-  }, []);
+    if (!mountedRef.current) {
+      mountedRef.current = true;
+      void playItemRef.current(startIndex);
+      return;
+    }
+    if (startIndex === currentIndexRef.current) return;
+    stopPreviousSource();
+    void playItemRef.current(startIndex);
+  }, [startIndex, stopPreviousSource]);
 
   // Cleanup on unmount
   useEffect(() => {
