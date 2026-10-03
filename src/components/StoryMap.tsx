@@ -25,7 +25,8 @@ const CURRENT_R = 9;
 const LABEL_FONT_SIZE = 12;
 const LABEL_MAX_CHARS = 16;
 const STUB_FONT_SIZE = 13;
-const LABEL_GAP = 16;
+const LABEL_OFFSET = 12;
+const HALO_WIDTH = 4;
 
 function truncate(text: string, max: number): string {
   return text.length > max ? text.slice(0, max - 1) + "…" : text;
@@ -41,6 +42,11 @@ interface GridNode {
   reached: boolean;
   px: number;
   py: number;
+  labelSide: "left" | "right";
+  labelX: number;
+  labelY: number;
+  labelAnchor: "start" | "end";
+  dotR: number;
 }
 
 interface PathSegment {
@@ -79,19 +85,32 @@ export function StoryMap({
     py: gy * GRID_Y_SPACING,
   });
 
+  // Compute viewBox bounds so we can decide label side
+  const allPxVals = scenesWithCoords.map((s) => toPx(s.map_x ?? 0, s.map_y ?? 0).px);
+  const globalMinX = allPxVals.length > 0 ? Math.min(...allPxVals) : 0;
+  const globalMaxX = allPxVals.length > 0 ? Math.max(...allPxVals) : 100;
+  const globalSpanX = globalMaxX - globalMinX || 1;
+  const rightThirdX = globalMinX + globalSpanX * (2 / 3);
+
+  // 1. Build all nodes with label placement
   const allNodes: GridNode[] = scenesWithCoords.map((s) => {
     const { px, py } = toPx(s.map_x ?? 0, s.map_y ?? 0);
+    const dotR = s.key === currentSceneKey ? CURRENT_R : DOT_R;
+    const labelSide: "left" | "right" = px >= rightThirdX ? "left" : "right";
+    const labelX = labelSide === "right" ? px + LABEL_OFFSET : px - LABEL_OFFSET;
+    const labelAnchor: "start" | "end" = labelSide === "right" ? "start" : "end";
     return {
       key: s.key, title: s.title, x: s.map_x ?? 0, y: s.map_y ?? 0,
       isEnding: s.is_ending, isCurrent: s.key === currentSceneKey,
       reached: reachedScenes.has(s.key), px, py,
+      labelSide, labelX, labelY: py, labelAnchor, dotR,
     };
   });
 
   const nodeMap = new Map<string, GridNode>();
   for (const n of allNodes) nodeMap.set(n.key, n);
 
-  // 1. Build path segments from steps
+  // 2. Build path segments from steps — offset to dot edges
   const pathSegments: PathSegment[] = [];
   for (const step of steps) {
     if (!step.choice_key) continue;
@@ -100,16 +119,23 @@ export function StoryMap({
     const fromNode = nodeMap.get(step.scene_key);
     const toNode = nodeMap.get(choice.to_scene_key);
     if (!fromNode || !toNode) continue;
+    const dx = toNode.px - fromNode.px;
+    const dy = toNode.py - fromNode.py;
+    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+    const ux = dx / dist;
+    const uy = dy / dist;
     pathSegments.push({
       fromKey: step.scene_key, toKey: choice.to_scene_key,
-      fromX: fromNode.px, fromY: fromNode.py,
-      toX: toNode.px, toY: toNode.py,
+      fromX: fromNode.px + ux * fromNode.dotR,
+      fromY: fromNode.py + uy * fromNode.dotR,
+      toX: toNode.px - ux * toNode.dotR,
+      toY: toNode.py - uy * toNode.dotR,
       timeline: step.timeline,
       isLoop: toNode.y < fromNode.y,
     });
   }
 
-  // 2. Build fog stubs — start at dot edge, angle away from label area
+  // 3. Build fog stubs — angle away from label side
   const stubExits: StubExit[] = [];
   if (mapMode === "fog") {
     const allSceneKeys = new Set(scenes.map((s) => s.key));
@@ -124,21 +150,34 @@ export function StoryMap({
           const targetPx = toPx(toScene?.map_x ?? fromNode.x, toScene?.map_y ?? fromNode.y + 1);
           let dx = targetPx.px - fromNode.px;
           let dy = targetPx.py - fromNode.py;
-          // Constrain stub angle to upper half: -150° to -30° (screen coords)
-          // so "?" never overlaps the label below the dot
+
+          // Constrain stub angle to avoid label side
+          // Label on right → stubs go left (up-left / down-left): -150° to -30°
+          // Label on left → stubs go right (up-right / down-right): -30° to -150° mirrored → -150° to -30° offset
           let angleDeg = Math.atan2(dy, dx) * 180 / Math.PI;
-          if (angleDeg > -30) angleDeg = -30;
-          if (angleDeg < -150) angleDeg = -150;
+          if (fromNode.labelSide === "right") {
+            // Stubs point left: constrain to -150°..-30° (upper-left quadrant)
+            if (angleDeg > -30) angleDeg = -30;
+            if (angleDeg < -150) angleDeg = -150;
+          } else {
+            // Stubs point right: constrain to -30°..-150° mirrored → upper-right
+            // -30° to -150° but on the right side: angles between -150° and -30° but with positive x
+            // Right side means cos(angle) > 0, so angle between -60° and 60°
+            // But we want upward/sideways: constrain to -60°..-120° won't work on right
+            // Actually: up-right is -45°, down-right is 45°. We want upper half so -150° to -30°
+            // but shifted right. For label on left, stubs should go right: angle between -60° and 60° but upward only
+            // Let's constrain to -120° to -60° → points up and to the right
+            if (angleDeg > -60) angleDeg = -60;
+            if (angleDeg < -120) angleDeg = -120;
+          }
           const angleRad = angleDeg * Math.PI / 180;
           const ux = Math.cos(angleRad);
           const uy = Math.sin(angleRad);
-          // Start at dot edge
-          const dotR = fromNode.isCurrent ? CURRENT_R : DOT_R;
+          const dotR = fromNode.dotR;
           const startX = fromNode.px + ux * dotR;
           const startY = fromNode.py + uy * dotR;
           const endX = fromNode.px + ux * (STUB_LEN + dotR);
           const endY = fromNode.py + uy * (STUB_LEN + dotR);
-          // "?" placed slightly beyond stub end
           const qX = endX + ux * 8;
           const qY = endY + uy * 8 + 4;
           stubExits.push({ fromKey: scene.key, startX, startY, endX, endY, qX, qY });
@@ -147,16 +186,28 @@ export function StoryMap({
     }
   }
 
-  // 3. Visible nodes: reached scenes only
+  // 4. Visible nodes: reached scenes only
   const visibleNodes = allNodes.filter((n) => n.reached);
 
-  // 4. Compute viewBox from visible nodes + stub endpoints + label space
+  // 5. Resolve vertical label collisions — nudge overlapping labels apart
+  const MIN_LABEL_GAP = LABEL_FONT_SIZE + 4;
+  const sortedByY = [...visibleNodes].sort((a, b) => a.labelY - b.labelY);
+  for (let i = 1; i < sortedByY.length; i++) {
+    const prev = sortedByY[i - 1];
+    const curr = sortedByY[i];
+    if (Math.abs(curr.labelY - prev.labelY) < MIN_LABEL_GAP) {
+      curr.labelY = prev.labelY + MIN_LABEL_GAP;
+    }
+  }
+
+  // 6. Compute viewBox from visible nodes + stub endpoints + label space
   const fitPoints: Array<{ x: number; y: number }> = [];
   for (const n of visibleNodes) {
     fitPoints.push({ x: n.px, y: n.py });
-    fitPoints.push({ x: n.px, y: n.py + DOT_R + LABEL_GAP + LABEL_FONT_SIZE + 4 });
-    fitPoints.push({ x: n.px - LABEL_MAX_CHARS * 3.5, y: n.py });
-    fitPoints.push({ x: n.px + LABEL_MAX_CHARS * 3.5, y: n.py });
+    fitPoints.push({ x: n.labelX, y: n.labelY });
+    fitPoints.push({ x: n.labelX + (n.labelSide === "right" ? LABEL_MAX_CHARS * 3.5 : -LABEL_MAX_CHARS * 3.5), y: n.labelY });
+    fitPoints.push({ x: n.px, y: n.py + n.dotR + 6 });
+    fitPoints.push({ x: n.px, y: n.py - n.dotR - 6 });
   }
   for (const s of stubExits) {
     fitPoints.push({ x: s.endX, y: s.endY });
@@ -172,7 +223,7 @@ export function StoryMap({
   const vbW = Math.max(fitMaxX - fitMinX, 100);
   const vbH = Math.max(fitMaxY - fitMinY, 100);
 
-  // 5. Group choices by timeline
+  // 7. Group choices by timeline
   const tlMap = new Map<number, Array<{ label: string; sceneKey: string }>>();
   for (const step of steps) {
     if (!step.choice_key) continue;
@@ -196,7 +247,9 @@ export function StoryMap({
   };
 
   const mapContent = (
-    <div className="bg-ink-50 dark:bg-ink-950 border-l border-ink-200 dark:border-ink-800 w-full h-full overflow-y-auto p-4">
+    <div
+      className="bg-ink-50 dark:bg-ink-950 border-l border-ink-200 dark:border-ink-800 w-full h-full overflow-y-auto p-4 [--map-bg:#faf9f7] dark:[--map-bg:#121110]"
+    >
       <div className="flex items-center justify-between mb-3">
         <h3 className="font-serif text-lg text-ink-900 dark:text-ink-50">Timeline</h3>
         <button onClick={onToggle} className="btn-ghost !px-2 !py-1" aria-label="Close map">
@@ -205,7 +258,7 @@ export function StoryMap({
       </div>
 
       <svg viewBox={`${fitMinX} ${fitMinY} ${vbW} ${vbH}`} className="w-full h-auto" style={{ maxHeight: "55vh" }}>
-        {/* Lines first */}
+        {/* Layer 1: Path lines */}
         {pathSegments.map((seg, i) => {
           const isCurrentTl = seg.timeline === currentTimeline;
           const color = isCurrentTl ? accentColor : "#9a958c";
@@ -222,7 +275,7 @@ export function StoryMap({
           );
         })}
 
-        {/* Fog stubs: dashed line from dot edge + "?" beyond end */}
+        {/* Layer 2: Fog stubs */}
         {stubExits.map((stub, i) => (
           <g key={`stub-${i}`}>
             <line x1={stub.startX} y1={stub.startY} x2={stub.endX} y2={stub.endY}
@@ -234,11 +287,10 @@ export function StoryMap({
           </g>
         ))}
 
-        {/* Dots on top */}
+        {/* Layer 3: Dots */}
         {visibleNodes.map((node) => {
-          const r = node.isCurrent ? CURRENT_R : DOT_R;
+          const r = node.dotR;
           const fill = node.isCurrent ? accentColor : node.isEnding ? accentColor : "#5c5447";
-          const label = truncate(node.title, LABEL_MAX_CHARS);
           return (
             <g key={node.key}>
               {node.isCurrent && (
@@ -251,13 +303,36 @@ export function StoryMap({
                 <circle cx={node.px} cy={node.py} r={r + 3} fill="none"
                   stroke={accentColor} strokeWidth={1.5} opacity={0.5} />
               )}
-              <text x={node.px} y={node.py + r + LABEL_GAP} textAnchor="middle"
-                fill="currentColor" fontSize={LABEL_FONT_SIZE} opacity={0.8}
-                className="text-ink-600 dark:text-ink-400 font-sans"
-                style={{ pointerEvents: "none", userSelect: "none", fontWeight: node.isCurrent ? 600 : 400 }}>
-                {label}
-              </text>
             </g>
+          );
+        })}
+
+        {/* Layer 4: Labels on top with halo */}
+        {visibleNodes.map((node) => {
+          const label = truncate(node.title, LABEL_MAX_CHARS);
+          return (
+            <text
+              key={`label-${node.key}`}
+              x={node.labelX}
+              y={node.labelY + LABEL_FONT_SIZE * 0.35}
+              textAnchor={node.labelAnchor}
+              fill="currentColor"
+              fontSize={LABEL_FONT_SIZE}
+              opacity={0.85}
+              className="text-ink-600 dark:text-ink-400 font-sans"
+              style={{
+                pointerEvents: "none",
+                userSelect: "none",
+                fontWeight: node.isCurrent ? 600 : 400,
+                paintOrder: "stroke",
+                stroke: "var(--map-bg)",
+                strokeWidth: HALO_WIDTH,
+                strokeLinejoin: "round",
+              }}
+              dominantBaseline="middle"
+            >
+              {label}
+            </text>
           );
         })}
       </svg>
