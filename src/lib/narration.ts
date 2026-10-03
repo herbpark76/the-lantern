@@ -18,11 +18,25 @@ export interface NarrationItem {
   itemIndex: number;
 }
 
-function stripMarkdown(text: string): string {
-  return text
+function decodeEntities(text: string): string {
+  const entities: Record<string, string> = {
+    "&amp;": "&",
+    "&lt;": "<",
+    "&gt;": ">",
+    "&quot;": '"',
+    "&#39;": "'",
+  };
+  return text.replace(/&(amp|lt|gt|quot|#39);/g, (m) => entities[m] ?? m);
+}
+
+function htmlToPlainText(html: string): string {
+  return decodeEntities(html)
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
     .replace(/\*\*(.+?)\*\*/g, "$1")
     .replace(/\*(.+?)\*/g, "$1")
     .replace(/\n/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
@@ -43,13 +57,13 @@ export function extractNarrationItems(
     }
     const paras = ch.html.split(/<p>/).slice(1);
     for (const para of paras) {
-      const text = para.replace(/<\/p>/, "").replace(/<br\s*\/?>/g, "\n");
-      const plain = stripMarkdown(text);
+      const rawHtml = para.replace(/<\/p>/, "");
+      const plain = htmlToPlainText(rawHtml);
       if (plain) {
         items.push({
           kind: "paragraph",
           plainText: plain,
-          html: `<p>${text}</p>`,
+          html: `<p>${rawHtml}</p>`,
           chapterIndex: chIdx,
           itemIndex: items.length,
         });
@@ -148,6 +162,7 @@ export function resolveNarration(
         end: seg.end,
       };
     }
+    console.warn("[narration] No manifest segment for:", item.plainText.slice(0, 80));
   }
   return null;
 }

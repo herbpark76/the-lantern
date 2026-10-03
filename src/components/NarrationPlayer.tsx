@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import {
-  Play, Pause, SkipBack, SkipForward, Square, Volume2, X, Loader2,
+  Play, Pause, SkipBack, SkipForward, Square, X, Loader2,
 } from "lucide-react";
 import type { NarrationItem, NarrationManifest, NarrationPlayback } from "@/lib/narration";
 import {
@@ -34,37 +34,88 @@ export function NarrationPlayer({
   const [usingBrowserTTS, setUsingBrowserTTS] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const manifestBaseUrl = manifestUrl ? getManifestBaseUrl(manifestUrl) : "";
-  const lastFileRef = useRef<string | null>(null);
 
-  const playItem = useCallback(async (idx: number) => {
-    if (idx >= items.length) {
+  // Refs for segment tracking — read by event handlers without stale closures
+  const segRef = useRef<NarrationPlayback | null>(null);
+  const currentIndexRef = useRef(startIndex);
+  const advancingRef = useRef(false);
+  const speedRef = useRef(speed);
+  const itemsRef = useRef(items);
+  const manifestRef = useRef(manifest);
+  const manifestBaseUrlRef = useRef(manifestBaseUrl);
+
+  // Keep refs in sync
+  useEffect(() => { speedRef.current = speed; }, [speed]);
+  useEffect(() => { itemsRef.current = items; }, [items]);
+  useEffect(() => { manifestRef.current = manifest; }, [manifest]);
+  useEffect(() => { manifestBaseUrlRef.current = manifestBaseUrl; }, [manifestBaseUrl]);
+
+  const goToNext = useCallback(() => {
+    if (advancingRef.current) return;
+    advancingRef.current = true;
+
+    const nextIdx = currentIndexRef.current + 1;
+    if (nextIdx >= itemsRef.current.length) {
       setIsPlaying(false);
       setCurrentPlayback(null);
+      segRef.current = null;
+      advancingRef.current = false;
       return;
     }
-    const item = items[idx];
+    currentIndexRef.current = nextIdx;
+    setCurrentIndex(nextIdx);
+    advancingRef.current = false;
+    void playItemRef.current(nextIdx);
+  }, []);
+
+  const playItemRef = useRef<(idx: number) => Promise<void>>(async () => {});
+
+  const playItem = useCallback(async (idx: number) => {
+    const curItems = itemsRef.current;
+    if (idx >= curItems.length) {
+      setIsPlaying(false);
+      setCurrentPlayback(null);
+      segRef.current = null;
+      return;
+    }
+    const item = curItems[idx];
     onHighlight(idx);
     setCurrentIndex(idx);
+    currentIndexRef.current = idx;
 
-    const manifestPlayback = resolveNarration(item, manifest, manifestBaseUrl);
+    const manifestPlayback = resolveNarration(item, manifestRef.current, manifestBaseUrlRef.current);
     if (manifestPlayback) {
       setLoading(false);
       setUsingBrowserTTS(false);
       setCurrentPlayback(manifestPlayback);
+      segRef.current = manifestPlayback;
 
       const audio = audioRef.current;
       if (!audio) return;
 
-      const urlChanged = !lastFileRef.current || !manifestPlayback.audioUrl?.endsWith(lastFileRef.current);
+      // Check if this is a continuation of the same file (no pause/seek needed)
+      const prevSeg = segRef.current;
+      const prevFile = prevSeg?.audioUrl;
+      const sameFile = prevFile && manifestPlayback.audioUrl === prevFile;
+
+      if (sameFile &&
+          prevSeg && prevSeg.end !== undefined && manifestPlayback.start !== undefined &&
+          Math.abs(manifestPlayback.start - prevSeg.end) < 0.15) {
+        // Same file, contiguous — just update segRef and highlight, let audio continue
+        audio.playbackRate = speedRef.current;
+        setIsPlaying(true);
+        return;
+      }
+
+      const urlChanged = !prevFile || manifestPlayback.audioUrl !== prevFile;
       if (urlChanged && manifestPlayback.audioUrl) {
         audio.src = manifestPlayback.audioUrl;
-        lastFileRef.current = manifestPlayback.audioUrl.split("/").pop() ?? null;
         await new Promise<void>((resolve) => {
           audio.oncanplay = () => resolve();
           audio.load();
         });
       }
-      audio.playbackRate = speed;
+      audio.playbackRate = speedRef.current;
       if (manifestPlayback.start !== undefined) {
         audio.currentTime = manifestPlayback.start;
       }
@@ -77,19 +128,20 @@ export function NarrationPlayer({
       return;
     }
 
-    // Try edge function
+    // Only call edge function when manifest truly has no entry
     setLoading(true);
     setUsingBrowserTTS(false);
     const url = await narrateViaEdgeFunction(storySlug, item.plainText, authToken);
     setLoading(false);
 
     if (url) {
-      setCurrentPlayback({ mode: "api", audioUrl: url, start: 0 });
+      const apiPlayback: NarrationPlayback = { mode: "api", audioUrl: url, start: 0 };
+      setCurrentPlayback(apiPlayback);
+      segRef.current = apiPlayback;
       const audio = audioRef.current;
       if (!audio) return;
       audio.src = url;
-      lastFileRef.current = null;
-      audio.playbackRate = speed;
+      audio.playbackRate = speedRef.current;
       audio.currentTime = 0;
       try {
         await audio.play();
@@ -101,62 +153,76 @@ export function NarrationPlayer({
     }
 
     // Fallback: browser speech synthesis
-    setCurrentPlayback({ mode: "tts" });
+    const ttsPlayback: NarrationPlayback = { mode: "tts" };
+    setCurrentPlayback(ttsPlayback);
+    segRef.current = ttsPlayback;
     setUsingBrowserTTS(true);
     setIsPlaying(true);
     speakViaBrowser(item.plainText);
     const checkEnd = setInterval(() => {
       if (typeof window !== "undefined" && !window.speechSynthesis.speaking) {
         clearInterval(checkEnd);
-        advance();
+        goToNext();
       }
     }, 200);
-  }, [items, manifest, manifestBaseUrl, onHighlight, speed, storySlug, authToken]);
+  }, [onHighlight, storySlug, authToken, goToNext]);
 
-  const advance = useCallback(() => {
-    stopBrowserSpeech();
-    setCurrentIndex((prev) => {
-      const next = prev + 1;
-      if (next >= items.length) {
-        setIsPlaying(false);
-        setCurrentPlayback(null);
-        return prev;
-      }
-      playItem(next);
-      return next;
-    });
-  }, [items.length, playItem]);
+  // Keep playItemRef in sync
+  useEffect(() => { playItemRef.current = playItem; }, [playItem]);
 
-  // Handle audio ended
+  // Audio event handlers — read from refs, not state
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
+
     const onTimeUpdate = () => {
-      if (currentPlayback?.mode === "manifest" && currentPlayback.end !== undefined) {
-        if (audio.currentTime >= currentPlayback.end) {
-          audio.pause();
-          advance();
+      const seg = segRef.current;
+      if (!seg || seg.mode !== "manifest" || seg.end === undefined) return;
+      if (advancingRef.current) return;
+
+      if (audio.currentTime >= seg.end) {
+        // Check if next segment is in the same file and contiguous
+        const nextIdx = currentIndexRef.current + 1;
+        if (nextIdx < itemsRef.current.length) {
+          const nextItem = itemsRef.current[nextIdx];
+          const nextSeg = resolveNarration(nextItem, manifestRef.current, manifestBaseUrlRef.current);
+          if (nextSeg && nextSeg.mode === "manifest" &&
+              nextSeg.audioUrl === seg.audioUrl &&
+              nextSeg.start !== undefined &&
+              Math.abs(nextSeg.start - seg.end) < 0.15) {
+            // Contiguous in same file — don't pause, just advance segRef
+            currentIndexRef.current = nextIdx;
+            setCurrentIndex(nextIdx);
+            onHighlight(nextIdx);
+            segRef.current = nextSeg;
+            setCurrentPlayback(nextSeg);
+            return;
+          }
         }
+        // Not contiguous — pause and advance
+        audio.pause();
+        goToNext();
       }
     };
+
     const onEnded = () => {
-      if (currentPlayback?.mode !== "manifest") {
-        advance();
+      const seg = segRef.current;
+      if (seg?.mode !== "manifest") {
+        goToNext();
       }
     };
+
     audio.addEventListener("timeupdate", onTimeUpdate);
     audio.addEventListener("ended", onEnded);
     return () => {
       audio.removeEventListener("timeupdate", onTimeUpdate);
       audio.removeEventListener("ended", onEnded);
     };
-  }, [currentPlayback, advance]);
+  }, [goToNext, onHighlight]);
 
-  // Start playing when component mounts or startIndex changes
+  // Start playing on mount
   useEffect(() => {
-    if (isPlaying) {
-      playItem(currentIndex);
-    }
+    playItem(startIndex);
   }, []);
 
   // Update playback rate
@@ -164,11 +230,7 @@ export function NarrationPlayer({
     if (audioRef.current && !usingBrowserTTS) {
       audioRef.current.playbackRate = speed;
     }
-    if (usingBrowserTTS && typeof window !== "undefined" && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-      if (isPlaying) playItem(currentIndex);
-    }
-  }, [speed]);
+  }, [speed, usingBrowserTTS]);
 
   const handlePlayPause = () => {
     if (isPlaying) {
@@ -190,14 +252,16 @@ export function NarrationPlayer({
 
   const handlePrev = () => {
     stopBrowserSpeech();
-    const prev = Math.max(0, currentIndex - 1);
+    const prev = Math.max(0, currentIndexRef.current - 1);
+    currentIndexRef.current = prev;
     setCurrentIndex(prev);
     playItem(prev);
   };
 
   const handleNext = () => {
     stopBrowserSpeech();
-    const next = Math.min(items.length - 1, currentIndex + 1);
+    const next = Math.min(items.length - 1, currentIndexRef.current + 1);
+    currentIndexRef.current = next;
     setCurrentIndex(next);
     playItem(next);
   };
@@ -207,6 +271,7 @@ export function NarrationPlayer({
     audioRef.current?.pause();
     setIsPlaying(false);
     setCurrentPlayback(null);
+    segRef.current = null;
     onClose();
   };
 
