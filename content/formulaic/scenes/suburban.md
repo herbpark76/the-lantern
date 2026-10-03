@@ -24,6 +24,7 @@ choices:
 variants: []
 ---
 
+
 ## Three Hundred Feet
 
 The driveway was three hundred feet of heated limestone. I had driven it perhaps four thousand times. I had never once walked it.
@@ -54,8 +55,7 @@ Same pause before “early.”
 
 He held a white card up to the gap. It was blank except for two numbers, written by hand in blue ink.
 
-**34.0522**
-**118.2437**
+*A blank white card with two numbers written by hand in blue ink: 34.0522 and 118.2437.*
 
 “For later,” he said.
 

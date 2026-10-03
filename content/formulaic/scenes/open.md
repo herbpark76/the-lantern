@@ -32,12 +32,17 @@ choices:
 variants:
 - slot: saucer
   when: {}
-  text: The handle pointed at three.
+  text: |-
+    *A saucer seen from above. The cup handle points at three o'clock.*
+
+    The handle pointed at three.
   priority: 0
 - slot: saucer
   when:
     timeline: 2
   text: |-
+    *A saucer seen from above. The cup handle points at two o'clock.*
+
     The handle pointed at two.
 
     I am almost sure that the day before it had pointed at three. I am almost sure there was a day before.
@@ -46,6 +51,8 @@ variants:
   when:
     timeline: 3
   text: |-
+    *A saucer seen from above. The cup handle points at one o'clock.*
+
     The handle pointed at one.
 
     I am almost sure that the day before it had pointed at two. I am almost sure there was a day before.
@@ -54,6 +61,8 @@ variants:
   when:
     timeline: 4
   text: |-
+    *A saucer seen from above. The cup handle points at twelve o'clock.*
+
     The handle pointed at twelve.
 
     I am almost sure that the day before it had pointed at one. I am almost sure there was a day before.
@@ -62,6 +71,8 @@ variants:
   when:
     timeline: 5
   text: |-
+    *A saucer seen from above. The cup handle points at eleven o'clock.*
+
     The handle pointed at eleven.
 
     I am almost sure that the day before it had pointed at twelve. I am almost sure there was a day before.
@@ -70,6 +81,8 @@ variants:
   when:
     timeline_gte: 6
   text: |-
+    *A saucer seen from above. The cup handle points at ten o'clock.*
+
     The handle pointed at ten.
 
     I am almost sure that the day before it had pointed at eleven. I am almost sure there was a day before.
@@ -96,6 +109,7 @@ variants:
   text: I had walked down to it before. I did not know how I knew that. I did not like knowing it.
   priority: 10
 ---
+
 
 ## The Saucer
 
@@ -175,7 +189,7 @@ My grandfather sold pipe to half the new towns in Arizona after the war. There i
 
 Dinner in my parents' house was at six-thirty every night, with place cards, even when there were only three of us and we had sat in the same chairs for years. My mother lettered the cards herself, in fountain pen. Mine looked like this:
 
-**Frank**
+*A folded place card with the name Frank written on it in fountain pen.*
 
 When I was seven, I knocked over a water glass. Nobody said anything. The housekeeper changed the tablecloth around me while I sat there. My mother reached over and fixed my posture. After a while my father said, “Composure, Frank,” and went back to his fish.
 
