@@ -11,7 +11,7 @@ import {
   extractNarrationItems, fetchManifest, stopBrowserSpeech,
   type NarrationItem, type NarrationManifest,
 } from "@/lib/narration";
-import { ArrowLeft, ChevronRight, Users, CheckCircle, Loader2, Home, BookOpen, Headphones } from "lucide-react";
+import { ArrowLeft, ChevronRight, Users, CheckCircle, Loader2, Home, BookOpen, Headphones, Map as MapIcon } from "lucide-react";
 import { ReadingSettingsPopover, useReaderSettings } from "@/components/ReadingSettings";
 
 interface ReaderProps {
@@ -52,6 +52,19 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
   const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null);
   const [narrationItems, setNarrationItems] = useState<NarrationItem[]>([]);
   const [narrationWaiting, setNarrationWaiting] = useState(false);
+
+  // Map sidebar open/closed — persisted per playthrough
+  const mapOpenKey = `storymap:open:${playthroughId}`;
+  const [mapOpen, setMapOpen] = useState(() => {
+    try { return localStorage.getItem(mapOpenKey) !== "false"; } catch { return true; }
+  });
+  const toggleMap = useCallback(() => {
+    setMapOpen((prev) => {
+      const next = !prev;
+      try { localStorage.setItem(mapOpenKey, String(next)); } catch { /* noop */ }
+      return next;
+    });
+  }, [mapOpenKey]);
 
   const narrationConfigured = !!storySettings?.narration;
   const manifestUrl = storySettings?.narration?.manifest ?? null;
@@ -292,7 +305,7 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
 
   return (
     <div className="min-h-[calc(100vh-3.5rem)]">
-      <div className={`${readerSettings.width === "wide" ? "max-w-3xl" : readerSettings.width === "narrow" ? "max-w-lg" : "max-w-2xl"} mx-auto px-4 sm:px-6 py-8 ${listenOn ? "pb-24" : ""}`}>
+      <div className={`${readerSettings.width === "wide" ? "max-w-3xl" : readerSettings.width === "narrow" ? "max-w-lg" : "max-w-2xl"} mx-auto px-4 sm:px-6 py-8 ${listenOn ? "pb-24" : ""} ${mapOpen ? "lg:pr-[320px]" : ""}`}>
         {/* Top bar */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
@@ -306,6 +319,16 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
               >
                 <Headphones size={16} />
                 {listenOn ? "Listening" : "Listen"}
+              </button>
+            )}
+            {storySettings && storySettings.map !== "off" && (
+              <button
+                onClick={toggleMap}
+                className={`btn-ghost !px-3 !py-2 flex items-center gap-1.5 ${mapOpen ? "text-accent-600 dark:text-accent-400" : ""}`}
+                aria-label="Toggle timeline map"
+              >
+                <MapIcon size={16} />
+                <span className="text-xs hidden sm:inline">Timeline</span>
               </button>
             )}
             <ReadingSettingsPopover
@@ -460,6 +483,10 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
           steps={steps}
           accentColor={accent}
           currentSceneKey={playthrough.current_scene_key}
+          currentTimeline={playthrough.timeline}
+          showTimelines={!!storySettings.timelines}
+          isOpen={mapOpen}
+          onToggle={toggleMap}
         />
       )}
     </div>
