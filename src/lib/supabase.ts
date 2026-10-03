@@ -108,11 +108,18 @@ export interface SyncRun {
   errors: string[];
 }
 
+export interface ReaderSettings {
+  textSize: number;
+  lineSpacing: number;
+  width: "narrow" | "normal" | "wide";
+}
+
 export interface Profile {
   id: string;
   display_name: string;
   role: UserRole;
   joined_at: string;
+  reader_settings: ReaderSettings | null;
 }
 
 export interface Playthrough {

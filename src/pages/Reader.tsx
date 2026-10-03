@@ -12,6 +12,7 @@ import {
   type NarrationItem, type NarrationManifest,
 } from "@/lib/narration";
 import { ArrowLeft, ChevronRight, Users, CheckCircle, Loader2, Home, BookOpen, Headphones } from "lucide-react";
+import { ReadingSettingsPopover, useReaderSettings } from "@/components/ReadingSettings";
 
 interface ReaderProps {
   slug: string;
@@ -39,6 +40,7 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
   const [storySettings, setStorySettings] = useState<StorySettings | null>(null);
   const crowdTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [renderedChapters, setRenderedChapters] = useState<Array<{ number: number; title: string; html: string }>>([]);
+  const { settings: readerSettings, updateSize, updateSpacing, updateWidth } = useReaderSettings(profile);
 
   // Narration state
   const [listenOn, setListenOn] = useState(() => localStorage.getItem(LISTEN_KEY) === "true");
@@ -323,7 +325,13 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
         </div>
 
         {/* Chapters */}
-        <div className="prose-reader mx-auto">
+        <div
+          className="prose-reader mx-auto"
+          style={{
+            fontSize: `${readerSettings.textSize / 16}rem`,
+            lineHeight: readerSettings.lineSpacing,
+          }}
+        >
           {renderedChapters.map((ch) => {
             const chapterStartItem = narrationItemCounter;
 
