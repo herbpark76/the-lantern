@@ -27,6 +27,7 @@ export interface Story {
   author_id: string | null;
   status: StoryStatus;
   settings: StorySettings;
+  start_scene: string | null;
   synced_commit: string | null;
   synced_at: string | null;
 }

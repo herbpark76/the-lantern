@@ -43,14 +43,17 @@ export function StoryDetailPage({ slug }: StoryDetailProps) {
     }
 
     setStarting(true);
-    const { data: scenes } = await supabase
-      .from("scenes")
-      .select("key")
-      .eq("story_slug", slug)
-      .order("act", { ascending: true })
-      .limit(1);
 
-    const firstScene = scenes?.[0]?.key ?? "start";
+    let firstScene = story?.start_scene ?? null;
+    if (!firstScene) {
+      const { data: scenes } = await supabase
+        .from("scenes")
+        .select("key")
+        .eq("story_slug", slug)
+        .order("act", { ascending: true })
+        .limit(1);
+      firstScene = scenes?.[0]?.key ?? "start";
+    }
 
     const { data: newPt, error } = await supabase
       .from("playthroughs")
@@ -81,14 +84,16 @@ export function StoryDetailPage({ slug }: StoryDetailProps) {
       await supabase.from("playthroughs").delete().eq("id", activePlaythrough.id);
     }
 
-    const { data: scenes } = await supabase
-      .from("scenes")
-      .select("key")
-      .eq("story_slug", slug)
-      .order("act", { ascending: true })
-      .limit(1);
-
-    const firstScene = scenes?.[0]?.key ?? "start";
+    let firstScene = story?.start_scene ?? null;
+    if (!firstScene) {
+      const { data: scenes } = await supabase
+        .from("scenes")
+        .select("key")
+        .eq("story_slug", slug)
+        .order("act", { ascending: true })
+        .limit(1);
+      firstScene = scenes?.[0]?.key ?? "start";
+    }
 
     const { data: newPt } = await supabase
       .from("playthroughs")

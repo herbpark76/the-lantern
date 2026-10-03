@@ -19,6 +19,7 @@ interface StoryYaml {
   blurb: string;
   author_email: string;
   status: "draft" | "published";
+  start_scene?: string;
   settings: {
     timelines: boolean;
     crowd_split: boolean;
@@ -278,6 +279,10 @@ async function syncStory(slug: string, supabase: ReturnType<typeof createClient>
     errors.push("No scene has is_ending: true — at least one ending is required.");
   }
 
+  if (storyFm.start_scene && !sceneKeys.has(storyFm.start_scene)) {
+    errors.push(`story.yaml start_scene "${storyFm.start_scene}" does not match any scene key.`);
+  }
+
   const declaredFlags = new Set(flagDefs.map((f) => f.key));
   for (const scene of sceneData) {
     for (const choice of scene.frontmatter.choices) {
@@ -349,6 +354,7 @@ async function syncStory(slug: string, supabase: ReturnType<typeof createClient>
     title: storyFm.title,
     blurb: storyFm.blurb,
     status: storyFm.status,
+    start_scene: storyFm.start_scene ?? null,
     settings: storyFm.settings,
     synced_commit: commitSha,
     synced_at: new Date().toISOString(),
