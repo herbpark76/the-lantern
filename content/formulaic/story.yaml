@@ -2,6 +2,7 @@ title: Formulaic
 blurb: "Bel Air, 6:38 a.m. Frank Gaas is worth eleven billion dollars, and his coffee is wrong. Chapter F: Frank's Story."
 author_email: hpark@clarenttech.com
 status: published
+start_scene: open
 settings:
   timelines: true
   crowd_split: true
