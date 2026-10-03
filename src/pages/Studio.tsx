@@ -100,7 +100,11 @@ export function StudioPage() {
         </div>
       )}
 
-      {tab === "stories" && <StoriesTab stories={stories} />}
+      {tab === "stories" && <StoriesTab stories={stories} onStoriesChanged={() => {
+        supabase.from("stories").select("*").order("title").then(({ data }) => {
+          setStories((data as Story[]) ?? []);
+        });
+      }} />}
       {tab === "map" && selectedSlug && <MapTab slug={selectedSlug} />}
       {tab === "preview" && selectedSlug && <PreviewTab slug={selectedSlug} />}
       {tab === "queue" && <QueueTab stories={stories} />}
@@ -113,9 +117,13 @@ export function StudioPage() {
 }
 
 // === STORIES TAB ===
-function StoriesTab({ stories }: { stories: Story[] }) {
+function StoriesTab({ stories, onStoriesChanged }: { stories: Story[]; onStoriesChanged?: () => void }) {
+  const { session } = useAuth();
   const [syncing, setSyncing] = useState<string | null>(null);
   const [syncResults, setSyncResults] = useState<Record<string, { ok: boolean; errors: string[] }>>({});
+  const [syncAllRunning, setSyncAllRunning] = useState(false);
+
+  const authToken = session?.access_token ?? import.meta.env.VITE_SUPABASE_ANON_KEY;
 
   const handleSync = async (slug: string) => {
     setSyncing(slug);
@@ -126,7 +134,7 @@ function StoriesTab({ stories }: { stories: Story[] }) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          Authorization: `Bearer ${authToken}`,
         },
         body: JSON.stringify({ story_slug: slug }),
       });
@@ -141,12 +149,82 @@ function StoriesTab({ stories }: { stories: Story[] }) {
       setSyncResults((prev) => ({ ...prev, [slug]: { ok: false, errors: [String(err)] } }));
     }
     setSyncing(null);
+    onStoriesChanged?.();
+  };
+
+  const handleSyncAll = async () => {
+    setSyncAllRunning(true);
+    setSyncResults({});
+    try {
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-content`;
+      const resp = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({ story_slug: "all" }),
+      });
+      const data = await resp.json();
+      if (data.results) {
+        const newResults: Record<string, { ok: boolean; errors: string[] }> = {};
+        for (const r of data.results as Array<{ slug: string; ok: boolean; errors: string[] }>) {
+          newResults[r.slug] = { ok: r.ok, errors: r.errors ?? [] };
+        }
+        setSyncResults(newResults);
+      } else {
+        setSyncResults({ _global: { ok: false, errors: [data.error ?? "Sync failed"] } });
+      }
+    } catch (err) {
+      setSyncResults({ _global: { ok: false, errors: [String(err)] } });
+    }
+    setSyncAllRunning(false);
+    onStoriesChanged?.();
   };
 
   return (
     <div className="space-y-4">
+      {/* Sync all button — always visible */}
+      <div className="card p-4 flex items-center justify-between gap-3">
+        <div>
+          <p className="font-serif text-sm text-ink-700 dark:text-ink-300">Sync all stories from GitHub</p>
+          <p className="text-xs font-sans text-ink-400 mt-0.5">Discovers every folder under /content/ and syncs each one.</p>
+        </div>
+        <button
+          onClick={handleSyncAll}
+          disabled={syncAllRunning}
+          className="btn-primary !py-2 shrink-0"
+        >
+          {syncAllRunning ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+          Sync all from GitHub
+        </button>
+      </div>
+
+      {/* Global sync error */}
+      {syncResults._global && (
+        <div className="card p-3 text-sm font-sans bg-error-500/10 text-error-500 rounded-lg">
+          <span className="flex items-center gap-1 mb-1"><XCircle size={14} /> Sync all failed</span>
+          {syncResults._global.errors.map((e, i) => (
+            <p key={i} className="text-xs ml-5">{e}</p>
+          ))}
+        </div>
+      )}
+
+      {/* Sync all summary */}
+      {syncAllRunning === false && Object.keys(syncResults).length > 0 && !syncResults._global && (
+        <div className="card p-3 text-sm font-sans">
+          <div className="flex items-center gap-2 mb-2">
+            <CheckCircle size={14} className="text-success-500" />
+            <span className="text-ink-700 dark:text-ink-300">
+              Synced {Object.keys(syncResults).length} {Object.keys(syncResults).length === 1 ? "story" : "stories"}:
+              {Object.values(syncResults).filter((r) => r.ok).length} ok, {Object.values(syncResults).filter((r) => !r.ok).length} failed
+            </span>
+          </div>
+        </div>
+      )}
+
       {stories.length === 0 ? (
-        <p className="text-ink-500 dark:text-ink-400 text-center py-8">No stories yet. Sync content from GitHub to get started.</p>
+        <p className="text-ink-500 dark:text-ink-400 text-center py-8">No stories yet. Use "Sync all from GitHub" above to discover and import stories.</p>
       ) : (
         stories.map((story) => (
           <div key={story.slug} className="card p-5">
