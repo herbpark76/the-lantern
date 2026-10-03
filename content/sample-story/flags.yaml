@@ -1,0 +1,4 @@
+- key: path_taken
+  type: choice
+  allowed_values: ["left", "right"]
+  description: Which road the traveler chose at the crossroads.

@@ -1,0 +1,9 @@
+title: The Lantern at the Crossroads
+blurb: A traveler comes to a fork in the road at dusk. A lantern hangs from a dead oak, and the choice of which path to take will shape everything that follows.
+author_email: author@example.com
+status: published
+settings:
+  timelines: true
+  crowd_split: true
+  map: fog
+  accent_color: "#c97b3a"

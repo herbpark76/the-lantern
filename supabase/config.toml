@@ -1,0 +1,11 @@
+[functions.sync-content]
+verify_jwt = true
+entrypoint = "./functions/sync-content/index.ts"
+
+[functions.edit-request]
+verify_jwt = true
+entrypoint = "./functions/edit-request/index.ts"
+
+[functions.list-edit-requests]
+verify_jwt = true
+entrypoint = "./functions/list-edit-requests/index.ts"
