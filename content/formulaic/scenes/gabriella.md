@@ -1,6 +1,7 @@
 ---
 key: gabriella
 title: Zurich
+slug: The kitchen · 6:54 a.m.
 act: 1
 is_bottleneck: false
 is_ending: false
@@ -29,6 +30,7 @@ choices:
   requires: {}
 variants: []
 ---
+
 
 ## Zurich
 

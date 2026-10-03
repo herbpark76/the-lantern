@@ -1,6 +1,7 @@
 ---
 key: listen
 title: The Radio
+slug: Eastbound
 act: 3
 is_bottleneck: false
 is_ending: false
@@ -40,6 +41,7 @@ variants:
   text: Lex
   priority: 5
 ---
+
 
 ## The Radio
 

@@ -1,6 +1,7 @@
 ---
 key: kickout
 title: Synchronized Swimmers
+slug: A bus lane
 act: 3
 is_bottleneck: false
 is_ending: false
@@ -40,6 +41,7 @@ variants:
   text: Lex
   priority: 5
 ---
+
 
 ## The Bus Lane
 

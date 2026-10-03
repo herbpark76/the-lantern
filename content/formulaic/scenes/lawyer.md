@@ -1,6 +1,7 @@
 ---
 key: lawyer
 title: Ira
+slug: In the car · 7:40 a.m.
 act: 2
 is_bottleneck: false
 is_ending: false
@@ -23,6 +24,7 @@ choices:
   requires: {}
 variants: []
 ---
+
 
 ## Denise
 

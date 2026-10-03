@@ -1,6 +1,7 @@
 ---
 key: open
 title: The Saucer
+slug: Bel Air · 6:38 a.m.
 act: 1
 is_bottleneck: false
 is_ending: false
@@ -33,6 +34,8 @@ variants:
 - slot: saucer
   when: {}
   text: |-
+    ![](/drawings/formulaic/saucer-3.svg)
+
     *A saucer seen from above. The cup handle points at three o'clock.*
 
     The handle pointed at three.
@@ -41,6 +44,8 @@ variants:
   when:
     timeline: 2
   text: |-
+    ![](/drawings/formulaic/saucer-2.svg)
+
     *A saucer seen from above. The cup handle points at two o'clock.*
 
     The handle pointed at two.
@@ -51,6 +56,8 @@ variants:
   when:
     timeline: 3
   text: |-
+    ![](/drawings/formulaic/saucer-1.svg)
+
     *A saucer seen from above. The cup handle points at one o'clock.*
 
     The handle pointed at one.
@@ -61,6 +68,8 @@ variants:
   when:
     timeline: 4
   text: |-
+    ![](/drawings/formulaic/saucer-12.svg)
+
     *A saucer seen from above. The cup handle points at twelve o'clock.*
 
     The handle pointed at twelve.
@@ -71,6 +80,8 @@ variants:
   when:
     timeline: 5
   text: |-
+    ![](/drawings/formulaic/saucer-11.svg)
+
     *A saucer seen from above. The cup handle points at eleven o'clock.*
 
     The handle pointed at eleven.
@@ -81,6 +92,8 @@ variants:
   when:
     timeline_gte: 6
   text: |-
+    ![](/drawings/formulaic/saucer-10.svg)
+
     *A saucer seen from above. The cup handle points at ten o'clock.*
 
     The handle pointed at ten.
@@ -109,6 +122,7 @@ variants:
   text: I had walked down to it before. I did not know how I knew that. I did not like knowing it.
   priority: 10
 ---
+
 
 
 ## The Saucer
@@ -188,6 +202,8 @@ Composure was the family business. Drainage pipe was only how we paid for it.
 My grandfather sold pipe to half the new towns in Arizona after the war. There is a street in a suburb of Phoenix called Gaas Avenue. I drove down it once, in my twenties, to see what it felt like. It was a perfectly ordinary street. It flooded every August, because the developer had used somebody else's pipe.
 
 Dinner in my parents' house was at six-thirty every night, with place cards, even when there were only three of us and we had sat in the same chairs for years. My mother lettered the cards herself, in fountain pen. Mine looked like this:
+
+![](/drawings/formulaic/placecard.svg)
 
 *A folded place card with the name Frank written on it in fountain pen.*
 

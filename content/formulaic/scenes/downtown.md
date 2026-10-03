@@ -1,6 +1,7 @@
 ---
 key: downtown
 title: Downtown
+slug: Eastbound → Downtown · 8:20 a.m.
 act: 4
 is_bottleneck: true
 is_ending: true
@@ -164,6 +165,7 @@ variants:
     I did not have the rest of the sentence. I held the phone and let it record nothing for a while.
   priority: 10
 ---
+
 
 ## Gas
 

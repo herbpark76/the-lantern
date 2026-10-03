@@ -1,6 +1,7 @@
 ---
 key: dispatch
 title: '911'
+slug: A loop
 act: 2
 is_bottleneck: false
 is_ending: false
@@ -24,6 +25,8 @@ variants:
 - slot: cup_hour
   when: {}
   text: |-
+    ![](/drawings/formulaic/saucer-2.svg)
+
     *A saucer seen from above. The cup handle points at two o'clock.*
 
     The handle pointed at two o'clock.
@@ -32,6 +35,8 @@ variants:
   when:
     timeline: 2
   text: |-
+    ![](/drawings/formulaic/saucer-1.svg)
+
     *A saucer seen from above. The cup handle points at one o'clock.*
 
     The handle pointed at one o'clock.
@@ -40,6 +45,8 @@ variants:
   when:
     timeline: 3
   text: |-
+    ![](/drawings/formulaic/saucer-12.svg)
+
     *A saucer seen from above. The cup handle points at twelve o'clock.*
 
     The handle pointed at twelve o'clock.
@@ -48,6 +55,8 @@ variants:
   when:
     timeline: 4
   text: |-
+    ![](/drawings/formulaic/saucer-11.svg)
+
     *A saucer seen from above. The cup handle points at eleven o'clock.*
 
     The handle pointed at eleven o'clock.
@@ -56,6 +65,8 @@ variants:
   when:
     timeline: 5
   text: |-
+    ![](/drawings/formulaic/saucer-10.svg)
+
     *A saucer seen from above. The cup handle points at ten o'clock.*
 
     The handle pointed at ten o'clock.
@@ -64,11 +75,14 @@ variants:
   when:
     timeline_gte: 6
   text: |-
+    ![](/drawings/formulaic/saucer-9.svg)
+
     *A saucer seen from above. The cup handle points at nine o'clock.*
 
     The handle pointed at nine o'clock.
   priority: 5
 ---
+
 
 
 ## 911

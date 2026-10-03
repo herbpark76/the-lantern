@@ -1,6 +1,7 @@
 ---
 key: suburban
 title: Four Inches
+slug: The driveway · 6:56 a.m.
 act: 1
 is_bottleneck: false
 is_ending: false
@@ -23,6 +24,7 @@ choices:
   requires: {}
 variants: []
 ---
+
 
 
 ## Three Hundred Feet
@@ -54,6 +56,8 @@ Same pause before “early.”
 “Honestly? I get a text with an address. That's the job.” He shrugged. “I'm not police, if that's what you're worried about. That's later. That part's going to be a lot louder than this.”
 
 He held a white card up to the gap. It was blank except for two numbers, written by hand in blue ink.
+
+![](/drawings/formulaic/card.svg)
 
 *A blank white card with two numbers written by hand in blue ink: 34.0522 and 118.2437.*
 

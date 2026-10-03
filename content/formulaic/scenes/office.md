@@ -1,6 +1,7 @@
 ---
 key: office
 title: Desmond
+slug: Century City · 7:31 a.m.
 act: 1
 is_bottleneck: false
 is_ending: false
@@ -30,14 +31,21 @@ choices:
 variants:
 - slot: nametag
   when: {}
-  text: '*A brass name tag reading DESMOND.*'
+  text: |-
+    ![](/drawings/formulaic/nametag.svg)
+
+    *A brass name tag reading DESMOND.*
   priority: 0
 - slot: nametag
   when:
     timeline_gte: 2
-  text: '*A brass name tag reading DESMOND. Underneath, faintly, another name.*'
+  text: |-
+    ![](/drawings/formulaic/nametag-ghost.svg)
+
+    *A brass name tag reading DESMOND. Underneath, faintly, another name.*
   priority: 10
 ---
+
 
 
 ## Normal
