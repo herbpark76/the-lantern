@@ -3,6 +3,7 @@ import { ThemeProvider } from "@/lib/theme";
 import { RouterProvider, useRouter, parsePath } from "@/lib/router";
 import { Nav } from "@/components/Nav";
 import { AuthPage } from "@/pages/Auth";
+import { ConfirmedPage } from "@/pages/Confirmed";
 import { LibraryPage } from "@/pages/Library";
 import { StoryDetailPage } from "@/pages/StoryDetail";
 import { ReaderPage } from "@/pages/Reader";
@@ -17,6 +18,8 @@ function Routes() {
 
   if (segments.length === 0) {
     page = <LibraryPage />;
+  } else if (segments[0] === "auth" && segments[1] === "confirmed") {
+    page = <ConfirmedPage />;
   } else if (segments[0] === "auth") {
     page = <AuthPage />;
   } else if (segments[0] === "shelf") {
