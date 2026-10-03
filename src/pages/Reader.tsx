@@ -305,7 +305,7 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
 
   return (
     <div className="min-h-[calc(100vh-3.5rem)]">
-      <div className={`${readerSettings.width === "wide" ? "max-w-3xl" : readerSettings.width === "narrow" ? "max-w-lg" : "max-w-2xl"} mx-auto px-4 sm:px-6 py-8 ${listenOn ? "pb-24" : ""} ${mapOpen ? "lg:pr-[320px]" : ""}`}>
+      <div className={`${readerSettings.width === "wide" ? "max-w-3xl" : readerSettings.width === "narrow" ? "max-w-lg" : "max-w-2xl"} mx-auto px-4 sm:px-6 py-8 ${listenOn ? "pb-24" : ""}`}>
         {/* Top bar */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">

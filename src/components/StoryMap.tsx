@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import type { Scene, Choice } from "@/lib/supabase";
 import { X, ChevronRight, Clock } from "lucide-react";
 
@@ -18,8 +18,14 @@ interface StoryMapProps {
 
 const GRID_X_SPACING = 90;
 const GRID_Y_SPACING = 70;
-const GRID_PADDING_X = 40;
-const GRID_PADDING_Y = 30;
+const VIEWBOX_PAD = 24;
+const STUB_LEN = 28;
+const DOT_R = 7;
+const CURRENT_R = 9;
+const LABEL_FONT_SIZE = 12;
+const LABEL_LINE_HEIGHT = 14;
+const LABEL_MAX_CHARS = 14;
+const STUB_FONT_SIZE = 13;
 
 function truncate(text: string, max: number): string {
   return text.length > max ? text.slice(0, max - 1) + "…" : text;
@@ -52,7 +58,10 @@ interface StubExit {
   fromKey: string;
   fromX: number;
   fromY: number;
-  angle: number;
+  endX: number;
+  endY: number;
+  midX: number;
+  midY: number;
 }
 
 export function StoryMap({
@@ -63,26 +72,15 @@ export function StoryMap({
 
   if (mapMode === "off") return null;
 
-  // Collect all scenes with valid coordinates
   const scenesWithCoords = scenes.filter((s) => s.map_x !== null && s.map_y !== null);
 
-  // Determine grid bounds
-  const allX = scenesWithCoords.map((s) => s.map_x ?? 0);
-  const allY = scenesWithCoords.map((s) => s.map_y ?? 0);
-  const minX = Math.min(...allX, 0);
-  const maxX = Math.max(...allX, 2);
-  const minY = Math.min(...allY, 0);
-  const maxY = Math.max(...allY, 6);
-  const gridWidth = (maxX - minX) * GRID_X_SPACING + GRID_PADDING_X * 2;
-  const gridHeight = (maxY - minY) * GRID_Y_SPACING + GRID_PADDING_Y * 2;
-
   const toPx = (gx: number, gy: number) => ({
-    px: (gx - minX) * GRID_X_SPACING + GRID_PADDING_X,
-    py: (gy - minY) * GRID_Y_SPACING + GRID_PADDING_Y,
+    px: gx * GRID_X_SPACING,
+    py: gy * GRID_Y_SPACING,
   });
 
-  // Build nodes
-  const nodes: GridNode[] = scenesWithCoords.map((s) => {
+  // Build all nodes
+  const allNodes: GridNode[] = scenesWithCoords.map((s) => {
     const { px, py } = toPx(s.map_x ?? 0, s.map_y ?? 0);
     return {
       key: s.key,
@@ -98,9 +96,9 @@ export function StoryMap({
   });
 
   const nodeMap = new Map<string, GridNode>();
-  for (const n of nodes) nodeMap.set(n.key, n);
+  for (const n of allNodes) nodeMap.set(n.key, n);
 
-  // Build path segments from steps
+  // Build path segments from steps (choices taken)
   const pathSegments: PathSegment[] = [];
   for (const step of steps) {
     if (!step.choice_key) continue;
@@ -122,7 +120,7 @@ export function StoryMap({
     });
   }
 
-  // Build stub exits (fog of war)
+  // Build stub exits (fog of war) — untaken exits from reached scenes
   const stubExits: StubExit[] = [];
   if (mapMode === "fog") {
     const allSceneKeys = new Set(scenes.map((s) => s.key));
@@ -134,14 +132,55 @@ export function StoryMap({
       for (const choice of sceneChoices) {
         if (!reachedScenes.has(choice.to_scene_key) && allSceneKeys.has(choice.to_scene_key)) {
           const toScene = scenes.find((s) => s.key === choice.to_scene_key);
-          const dx = (toScene?.map_x ?? fromNode.x) - fromNode.x;
-          const dy = (toScene?.map_y ?? fromNode.y + 1) - fromNode.y;
-          const angle = Math.atan2(dy, dx);
-          stubExits.push({ fromKey: scene.key, fromX: fromNode.px, fromY: fromNode.py, angle });
+          const toPxVals = toPx(toScene?.map_x ?? fromNode.x, toScene?.map_y ?? fromNode.y + 1);
+          const dx = toPxVals.px - fromNode.px;
+          const dy = toPxVals.py - fromNode.py;
+          const len = Math.sqrt(dx * dx + dy * dy) || 1;
+          const ux = dx / len;
+          const uy = dy / len;
+          const endX = fromNode.px + ux * STUB_LEN;
+          const endY = fromNode.py + uy * STUB_LEN;
+          stubExits.push({
+            fromKey: scene.key,
+            fromX: fromNode.px,
+            fromY: fromNode.py,
+            endX,
+            endY,
+            midX: (fromNode.px + endX) / 2,
+            midY: (fromNode.py + endY) / 2,
+          });
         }
       }
     }
   }
+
+  // Visible nodes: only reached scenes (and current scene)
+  const visibleNodes = allNodes.filter((n) => n.reached);
+
+  // Compute viewBox from reached nodes + stub endpoints with padding
+  const fitPoints: Array<{ x: number; y: number }> = [];
+  for (const n of visibleNodes) {
+    fitPoints.push({ x: n.px, y: n.py });
+    // Account for label space below dot
+    fitPoints.push({ x: n.px, y: n.py + DOT_R + LABEL_LINE_HEIGHT * 2 + 4 });
+    // Account for label width (rough)
+    fitPoints.push({ x: n.px - LABEL_MAX_CHARS * 3, y: n.py });
+    fitPoints.push({ x: n.px + LABEL_MAX_CHARS * 3, y: n.py });
+  }
+  for (const s of stubExits) {
+    fitPoints.push({ x: s.endX, y: s.endY });
+  }
+  // Fallback if no points
+  if (fitPoints.length === 0) {
+    fitPoints.push({ x: 0, y: 0 }, { x: 100, y: 100 });
+  }
+
+  const fitMinX = Math.min(...fitPoints.map((p) => p.x)) - VIEWBOX_PAD;
+  const fitMaxX = Math.max(...fitPoints.map((p) => p.x)) + VIEWBOX_PAD;
+  const fitMinY = Math.min(...fitPoints.map((p) => p.y)) - VIEWBOX_PAD;
+  const fitMaxY = Math.max(...fitPoints.map((p) => p.y)) + VIEWBOX_PAD;
+  const vbW = Math.max(fitMaxX - fitMinX, 100);
+  const vbH = Math.max(fitMaxY - fitMinY, 100);
 
   // Group choices by timeline
   const tlMap = new Map<number, Array<{ label: string; sceneKey: string }>>();
@@ -164,9 +203,21 @@ export function StoryMap({
   const loopPath = (seg: PathSegment) => {
     const dx = seg.toX - seg.fromX;
     const side = dx >= 0 ? 1 : -1;
-    const midX = (seg.fromX + seg.toX) / 2 + side * 30;
+    const midX = (seg.fromX + seg.toX) / 2 + side * 35;
     const midY = (seg.fromY + seg.toY) / 2;
     return `M ${seg.fromX} ${seg.fromY} Q ${midX} ${midY} ${seg.toX} ${seg.toY}`;
+  };
+
+  // Split label into max 2 lines
+  const splitLabel = (text: string): string[] => {
+    const truncated = truncate(text, LABEL_MAX_CHARS);
+    if (truncated.length <= 7) return [truncated];
+    const words = truncated.split(" ");
+    if (words.length === 1) return [truncated];
+    const mid = Math.ceil(words.length / 2);
+    const line1 = truncate(words.slice(0, mid).join(" "), LABEL_MAX_CHARS);
+    const line2 = truncate(words.slice(mid).join(" "), LABEL_MAX_CHARS);
+    return [line1, line2];
   };
 
   const mapContent = (
@@ -179,16 +230,15 @@ export function StoryMap({
       </div>
 
       <svg
-        viewBox={`0 0 ${gridWidth} ${gridHeight}`}
+        viewBox={`${fitMinX} ${fitMinY} ${vbW} ${vbH}`}
         className="w-full h-auto"
-        style={{ maxHeight: "50vh" }}
+        style={{ maxHeight: "55vh" }}
       >
-        {/* Paths */}
+        {/* Lines first (paths taken) */}
         {pathSegments.map((seg, i) => {
           const isCurrentTl = seg.timeline === currentTimeline;
-          const color = isCurrentTl ? accentColor : "#a89f8e";
-          const width = isCurrentTl ? 2.5 : 1.5;
-          const opacity = isCurrentTl ? 0.8 : 0.4;
+          const color = isCurrentTl ? accentColor : "#9a958c";
+          const opacity = isCurrentTl ? 1 : 0.5;
 
           if (seg.isLoop) {
             return (
@@ -197,7 +247,7 @@ export function StoryMap({
                 d={loopPath(seg)}
                 fill="none"
                 stroke={color}
-                strokeWidth={width}
+                strokeWidth={2}
                 opacity={opacity}
                 strokeLinecap="round"
               />
@@ -211,56 +261,50 @@ export function StoryMap({
               x2={seg.toX}
               y2={seg.toY}
               stroke={color}
-              strokeWidth={width}
+              strokeWidth={2}
               opacity={opacity}
               strokeLinecap="round"
             />
           );
         })}
 
-        {/* Fog stubs */}
-        {stubExits.map((stub, i) => {
-          const stubLen = 18;
-          const endX = stub.fromX + Math.cos(stub.angle) * stubLen;
-          const endY = stub.fromY + Math.sin(stub.angle) * stubLen;
-          return (
-            <g key={`stub-${i}`}>
-              <line
-                x1={stub.fromX}
-                y1={stub.fromY}
-                x2={endX}
-                y2={endY}
-                stroke="#a89f8e"
-                strokeWidth={1.2}
-                strokeDasharray="3,2"
-                opacity={0.35}
-              />
-              <text
-                x={endX + Math.cos(stub.angle) * 5}
-                y={endY + Math.sin(stub.angle) * 5 + 4}
-                textAnchor="middle"
-                fill="#a89f8e"
-                fontSize="10"
-                opacity={0.45}
-              >
-                ?
-              </text>
-            </g>
-          );
-        })}
+        {/* Fog stubs: dashed lines ending in "?" */}
+        {stubExits.map((stub, i) => (
+          <g key={`stub-${i}`}>
+            <line
+              x1={stub.fromX}
+              y1={stub.fromY}
+              x2={stub.endX}
+              y2={stub.endY}
+              stroke="currentColor"
+              strokeWidth={1.5}
+              strokeDasharray="4,3"
+              opacity={0.6}
+              className="text-ink-500 dark:text-ink-400"
+            />
+            <text
+              x={stub.endX}
+              y={stub.endY + 4}
+              textAnchor="middle"
+              fill="currentColor"
+              fontSize={STUB_FONT_SIZE}
+              opacity={0.6}
+              className="text-ink-500 dark:text-ink-400"
+            >
+              ?
+            </text>
+          </g>
+        ))}
 
-        {/* Scene nodes */}
-        {nodes.map((node) => {
-          const isStub = mapMode === "fog" && !node.reached;
-          if (isStub) return null;
-          const r = node.isCurrent ? 7 : node.isEnding ? 5.5 : 5;
+        {/* Dots on top */}
+        {visibleNodes.map((node) => {
+          const r = node.isCurrent ? CURRENT_R : DOT_R;
           const fill = node.isCurrent
             ? accentColor
             : node.isEnding
               ? accentColor
-              : node.reached
-                ? "#5c5447"
-                : "#d4cec1";
+              : "#5c5447";
+          const lines = splitLabel(node.title);
 
           return (
             <g key={node.key}>
@@ -268,9 +312,9 @@ export function StoryMap({
                 <circle
                   cx={node.px}
                   cy={node.py}
-                  r={r + 5}
+                  r={r + 6}
                   fill={accentColor}
-                  opacity={0.2}
+                  opacity={0.18}
                   className="animate-pulse"
                 />
               )}
@@ -279,33 +323,35 @@ export function StoryMap({
                 cy={node.py}
                 r={r}
                 fill={fill}
-                opacity={node.reached ? 1 : 0.5}
-                style={{ cursor: node.reached ? "pointer" : "default" }}
-                onClick={() => node.reached && setRecapScene(node.key)}
+                style={{ cursor: "pointer" }}
+                onClick={() => setRecapScene(node.key)}
               />
               {node.isEnding && (
                 <circle
                   cx={node.px}
                   cy={node.py}
-                  r={r + 2.5}
+                  r={r + 3}
                   fill="none"
                   stroke={accentColor}
-                  strokeWidth={1}
+                  strokeWidth={1.5}
                   opacity={0.5}
                 />
               )}
-              <text
-                x={node.px}
-                y={node.py + r + 12}
-                textAnchor="middle"
-                fill="currentColor"
-                fontSize="9"
-                opacity={node.reached ? 0.8 : 0.3}
-                className="text-ink-600 dark:text-ink-400"
-                style={{ pointerEvents: "none", userSelect: "none" }}
-              >
-                {truncate(node.title, 14)}
-              </text>
+              {lines.map((line, li) => (
+                <text
+                  key={li}
+                  x={node.px}
+                  y={node.py + r + 14 + li * LABEL_LINE_HEIGHT}
+                  textAnchor="middle"
+                  fill="currentColor"
+                  fontSize={LABEL_FONT_SIZE}
+                  opacity={0.8}
+                  className="text-ink-600 dark:text-ink-400"
+                  style={{ pointerEvents: "none", userSelect: "none" }}
+                >
+                  {line}
+                </text>
+              ))}
             </g>
           );
         })}
@@ -393,13 +439,13 @@ export function StoryMap({
 
   return (
     <>
-      {/* Desktop: sticky right sidebar (≥1040px) */}
-      <div className="hidden lg:block fixed top-14 right-0 bottom-0 w-[300px] z-30 animate-slide-in-right">
+      {/* Desktop: overlay sidebar (≥1200px) — overlays text, doesn't shrink it */}
+      <div className="hidden xl:block fixed top-14 right-0 bottom-0 w-[300px] z-30 animate-slide-in-right shadow-2xl">
         {mapContent}
       </div>
 
-      {/* Mobile: bottom drawer (<1040px) */}
-      <div className="lg:hidden fixed inset-0 z-40 bg-black/30" onClick={onToggle}>
+      {/* Below 1200px: overlay drawer */}
+      <div className="xl:hidden fixed inset-0 z-40 bg-black/30" onClick={onToggle}>
         <div
           className="absolute bottom-0 left-0 right-0 max-h-[70vh] animate-slide-up rounded-t-xl overflow-hidden shadow-2xl"
           onClick={(e) => e.stopPropagation()}
