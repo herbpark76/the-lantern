@@ -78,7 +78,7 @@ That morning his name tag said this:
 
 {{nametag}}
 
-He looked at me. Then at the screens. Then back at me. He picked up the desk phone, put it down, and picked it up again.
+He looked at me, and then at the screens, and then at me again, as if one of us might have changed in the meantime. He picked up the desk phone, put it down, and picked it up again.
 
 “Uh. Sir,” he said. “Can you, um. Can you just hang on one second? Just right there. I just gotta—” He pointed at the phone, as if the phone would explain.
 

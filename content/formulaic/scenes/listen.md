@@ -89,7 +89,7 @@ I had never told anyone that. I had never told myself that, in so many words.
 
 There was no performance in it. It was the voice from the dining room, with the fish and the place cards and the tablecloth being changed around a seven-year-old boy. It came out of the mouth of a young man in a thrift-store jacket, and then it went back wherever it lived.
 
-I have never told anyone about my father's voice. I have never told anyone about the water glass.
+I have never told anyone about my father's voice, or the water glass, or the fish.
 
 He turned the radio back up. It was a commercial for a mattress store.
 

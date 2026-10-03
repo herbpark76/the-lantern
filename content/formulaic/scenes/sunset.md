@@ -43,7 +43,7 @@ variants:
 
 {{alone}}
 
-I drove east on Sunset with no music. Sprinklers. Joggers. A man hosing down the sidewalk in front of a restaurant that would not open for six hours. A billboard for a personal-injury lawyer whose face had been up there so long the sun had turned him pale blue. None of them knew who I was yet. Or they did, and were being polite. In this city it is often hard to tell.
+I drove east on Sunset with no music, past the sprinklers and the joggers and a man hosing down the sidewalk in front of a restaurant that would not open for six hours, and under a billboard for a personal-injury lawyer whose face had been up there so long the sun had turned him pale blue. I have driven under that lawyer for years. I have sometimes wondered whether he is still alive, and whether anyone has thought to tell the billboard company, and whether he drives past himself on the way to work. None of them knew who I was yet. Or they did, and were being polite. In this city it is often hard to tell.
 
 ## Motive
 
@@ -51,7 +51,7 @@ I tried to think like the man on the screens. If I had attacked the Port of Long
 
 Money was the obvious answer, and I threw it out at once. I already had the money. Revenge, then. Against whom? I could not name a single person at the Port of Long Beach. Boredom. That one I held onto for a few blocks. I had been bored for a long time without being allowed to say so, and boredom has made men do stranger things than shut down a port.
 
-But I could not make it fit. I could not think of a reason. I have always been able to think of a reason. It is what I am for.
+But I could not make it fit, and that bothered me more than the helicopters would later, because I have always been able to think of a reason. It is what I am for.
 
 Somewhere around the Beverly Hills Hotel it occurred to me that there was another possibility. Someone else had a very good reason, and the reason was me.
 
@@ -81,11 +81,11 @@ The light at Doheny turned red. I stopped, because I am a man who stops at red l
 
 The passenger door opened.
 
-It was him. The bomber jacket. The grin. The young man I had been not quite seeing all morning, in the glass and on the wall and in the mirror. He got in, shut the door and buckled his seat belt, which surprised me more than anything else he did that day.
+It was him, the young man in the bomber jacket, the one I had been not quite seeing all morning, in the glass and on the wall and in the mirror. He got in, shut the door and buckled his seat belt, which surprised me more than anything else he did that day.
 
 “Okay,” he said. “Okay. Drive. They're like two blocks back.”
 
-He was perhaps twenty-six. His jacket came from a thrift store, and his hair had never met a professional. He smelled faintly of apples. He was out of breath, as if he'd been running to catch me, which made no sense, because I had been sitting at the light.
+He was perhaps twenty-six, in a jacket from a thrift store and hair that had never met a professional, and he smelled faintly of apples. He was out of breath, as if he'd been running to catch me, which made no sense, because I had been sitting at the light.
 
 He put his hands to the vents. “Is the seat heater on? Why is the seat heater on? It's like seventy degrees.” He found the button and turned it off and seemed very satisfied with himself.
 

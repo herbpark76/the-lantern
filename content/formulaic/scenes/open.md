@@ -131,11 +131,11 @@ My name is Frank Gaas. On the morning this story begins, I was worth eleven bill
 
 I lived in a glass house above Los Angeles. A Danish architect had told me, over a lunch I paid for, that the house would dissolve the boundary between inside and outside. It did not. The boundary held. It was the only thing I ever bought for forty-one million dollars that worked exactly as promised.
 
-I was forty-three years old. I had slept five hours, which is what I always slept. I had woken at 6:15, which is when I always woke. I had come downstairs and sat in the chair by the east glass, which is where I always sat, and watched the city come up out of the dark. From up there you cannot see a single person. You can see a great many lights, and you are expected to infer the people.
+I was forty-three years old. I had slept my usual five hours and woken at my usual 6:15 and come down to the chair by the east glass to watch the city come up out of the dark, as I did every morning. I sat in that chair every morning for nine years and could not tell you what color it is. Beige, possibly. Oatmeal. It was something a decorator chose, and she said a word about it that I have since forgotten, and charged me for the word. From up there you cannot see a single person. You can see a great many lights, and you are expected to infer the people.
 
 *The coffee was wrong.*
 
-Not bad. Wrong. Teodoro had brought it to me every morning for six years, at 6:40, with the saucer turned so the handle pointed at four o'clock. That is where my hand goes when it isn't thinking. I never told Teodoro this. He noticed. That was what I paid him for.
+Not bad. Wrong. Teodoro had brought it to me every morning for six years, at 6:40, with the saucer turned so the handle pointed at four o'clock. That is where my hand goes when it isn't thinking. I never told him that. He worked it out on his own, sometime in the first month, and never mentioned it either, and I suppose that was what I paid him for, although it was not in his job description, which I had also never read.
 
 Here is the saucer, from above, which is where I had always been in relation to it:
 
@@ -145,7 +145,7 @@ Here is the saucer, from above, which is where I had always been in relation to 
 
 “No,” I said. “It's fine.”
 
-A man worth eleven billion dollars does not complain about a saucer. That was the first formula I ever learned. I learned it so well I forgot I had learned it. I thought it was just my personality.
+A man worth eleven billion dollars does not complain about a saucer. That was the first formula I ever learned, and I learned it so thoroughly that I forgot it was a formula and mistook it for my personality.
 
 I lasted about a minute.
 
@@ -173,7 +173,7 @@ I closed it and put it back exactly where it had been. I never mentioned it. For
 
 In the mornings Teodoro listened to a Portuguese-language talk station on a small radio by the sink, very low. As far as I know he does not speak Portuguese. I asked him about it once, early on, and he said, “It's nice in the background,” and I said, “Sure,” and that was the end of it. I still think about it more than I should.
 
-That morning I watched him wipe down the steam wand and tried to think of one thing I knew about him that he had not been paid to let me know. I knew his birthday, because there had been a cake, which Gabriella arranged. I did not know whether he had children. I did not know what he did on Sundays. I did not know whether he had ever wanted to turn that saucer to some other hour on purpose, just to see what I would do.
+That morning I watched him wipe down the steam wand and tried to think of one thing I knew about him that he had not been paid to let me know. I knew his birthday, because there had been a cake, which Gabriella arranged. I did not know whether he had children, or what he did on Sundays, or where he went in the dead part of the afternoon between lunch and dinner, when the house got so quiet you could hear the refrigerator making up its mind about something. I did not know whether he had ever wanted to turn that saucer to some other hour on purpose, just to see what I would do.
 
 It occurred to me that this might be exactly what he had done. Then it occurred to me that a man who believes his butler is sending him messages through crockery should get more sleep.
 
@@ -185,7 +185,7 @@ I have woken at 6:15 since I was thirteen. That was when the bell rang at St. Al
 
 I have not heard that bell in thirty years. I still wake a few seconds before it would have rung, every morning, and lie there waiting for it. It never comes. I get up anyway.
 
-I looked Pruitt up once, years later. He sells boats in Florida. He looked happy in his photograph. I did not get in touch.
+I looked Pruitt up once, years later, late at night on a laptop, which is how most regrettable things begin. He sells boats in Florida now. There was a photograph of him on the dealership's website, standing in front of a pontoon boat in a polo shirt with the dealership's name stitched on the chest, and he looked happy, or at least he looked like a man whom a photographer had asked to look happy and who had managed it, which is more than I have ever managed. I drafted a short note to him. It began “You may not remember me.” I did not send it.
 
 ## The Drawer
 
@@ -213,7 +213,7 @@ Two words, in a perfectly ordinary voice. I have heard them in my head perhaps a
 
 Neither he nor his father ever complained about anything, including dying.
 
-I have been composed ever since. It has been very good for business. It has been very good for everything that can be measured, which I used to believe was everything.
+I have been composed ever since, and it has been very good for business, and for everything else that can be measured, which I used to believe was everything.
 
 I turned the saucer back to four o'clock myself. It did not help.
 
@@ -241,7 +241,7 @@ My father left me drainage pipe and a great deal of money and the impression tha
 
 Now we were nine thousand people in forty countries. Our software moved something like one in every six shipping containers on Earth. I have been told that figure many times, at conferences, by people who wanted me to feel something about it. I would nod. I have never seen one of our cranes up close. I saw a port once from a helicopter, in Rotterdam, during a sales visit. It looked like a child's room after the child has been told to clean it.
 
-The nine o'clock meeting was called Morning Ops. Twelve people around a table, four more on screens. A woman named Ruth read numbers aloud: dwell times, throughput, berth utilization. I sat at the head of the table and nodded when the numbers were good. They were nearly always good. That was most of what I did. I nodded at numbers.
+The nine o'clock meeting was called Morning Ops. Twelve people around a table, four more on screens. A woman named Ruth read numbers aloud: dwell times, throughput, berth utilization. I sat at the head of the table and nodded when the numbers were good, and they were nearly always good, so for the better part of a decade that was my job. I nodded at numbers. Once, in 2017, a number was bad, and I frowned, and the room went so quiet that someone's chair creaked, and the number was better by Thursday. I have no idea what anyone did between Monday and Thursday. I never asked. I assumed they had nodded at somebody else.
 
 Ruth has a very pleasant reading voice. I have sometimes thought she should do audiobooks.
 
@@ -263,11 +263,11 @@ I should tell you about the music room, since it will matter. When I met Gabriel
 
 These days she sat on the boards of three foundations, went to Pilates at eight, and drove to Ojai once a month to see her sister Bea, who grew lemons and did not like me, which I respected. Gabriella and I mostly communicated through a shared calendar. It was color-coded. Hers was green and mine was gray. Things we did together came out a kind of teal that the software chose on its own.
 
-The cello was upstairs now, in its case, in a room with humidity control. I could not remember the last time I had heard her play. I could not remember the last time I had asked.
+The cello was upstairs now, in its case, in a room with humidity control. I could not remember the last time I had heard her play, or the last time I had asked her to, which is not the same thing, and is worse.
 
 She looked at her phone. She said, “You're up early.”
 
-She had said that yesterday too. Same words. Same small pause before “early.” I remembered because the day before I had thought the pause sounded rehearsed, and I had been pleased with myself for noticing.
+She had said that yesterday too, in the same words, with the same small pause before “early.” I remembered because the day before I had thought the pause sounded rehearsed, and I had been pleased with myself for noticing.
 
 {{again}}
 
@@ -289,7 +289,7 @@ She nodded. Across the kitchen, Teodoro did not look up from the sink.
 
 “Okay,” I said.
 
-She poured herself some water and stood there drinking it, scrolling. By our standards this was a good morning. Nobody was angry. We had a plan for Saturday.
+She poured herself some water and stood there drinking it, scrolling. By our standards this was a good morning. Nobody was angry, we had a plan for Saturday, and I knew which Carol.
 
 There was a version of that morning in which I asked her a real question. I could almost see it, reflected in the dark glass beside the island. It was right there, on the other side of the glass. I have since learned that this is where most of life happens.
 

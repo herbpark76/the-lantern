@@ -84,7 +84,7 @@ I pulled over, onto the shoulder above the reservoir. A woman jogged past with a
 
 “I didn't ask you that, and I don't want you to tell me on this phone.” I heard paper moving. Ira still used paper. He said it made people nervous, and nervous people tell the truth. “Two o'clock. My office. We walk in together. You say nothing, I say everything. They'll take your passport, they'll do the paperwork, there'll be a bail number, we'll pay it. By tonight you're home, and this is a process, not a story.”
 
-A process, not a story. I loved him for that sentence. It was the most soothing thing anyone had said to me all day. It was a formula, and I knew how to live inside a formula.
+A process, not a story. I loved him for that sentence. It was the most soothing thing anyone had said to me all day, because it was a formula, and I have always known how to live inside a formula, as some people know how to live in hotels, and are a little lost in houses.
 
 “Bring a jacket,” he said. “It's cold in there. They keep it cold on purpose.”
 
@@ -94,7 +94,7 @@ A process, not a story. I loved him for that sentence. It was the most soothing 
 
 ## Mr. G
 
-Nobody called me Mr. G except Marcus at the front desk. Ira had never met Marcus. Ira did not know the names of his own doormen. He considered it a form of integrity.
+Nobody called me Mr. G except Marcus at the front desk, and Ira had never met Marcus. Ira did not know the names of his own doormen. He considered it a form of integrity.
 
 I did not mention it. I took the phone away from my ear and looked at it.
 

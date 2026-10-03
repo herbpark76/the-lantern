@@ -317,9 +317,9 @@ I could have turned. There was an exit. I knew where it went. I had a house in M
 
 I remember arriving.
 
-There were helicopters. There were drones hanging in the air like punctuation. There was red and blue light on every glass surface, and downtown Los Angeles is mostly glass surfaces. A street sweeper was doing its route along the far curb, very slowly, entirely unbothered. Nobody had told it.
+There were helicopters, and drones hanging in the air like punctuation, and red and blue light on every glass surface, and downtown Los Angeles is mostly glass surfaces. A street sweeper was doing its route along the far curb, very slowly, entirely unbothered. Nobody had told it.
 
-The passenger seat was empty. I had not seen him get out. The seat belt was still buckled, across nobody. The banana peel was on the floor mat.
+The passenger seat was empty. I had not seen him get out, but the seat belt was still buckled, across nobody, and the banana peel was on the floor mat, which I decided to find reassuring.
 
 {{early_for_ira}}
 

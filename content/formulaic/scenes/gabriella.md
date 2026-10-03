@@ -50,7 +50,7 @@ I was not in Zurich. I would have remembered Zurich. People do not forget Zurich
 
 “You got in at one,” she said. “The car brought you from Van Nuys. I heard you. You stood in the bedroom doorway for, like, a long time, and I said ‘Frank?’ and you didn't say anything, and then you went and slept in the guest room. I figured you didn't want to wake me.” She put the glass down. “Are you okay? You look gray.”
 
-I did not remember Van Nuys. I did not remember a doorway. What I remembered was this kitchen, this light, those words, and being pleased with myself about a pause.
+I did not remember Van Nuys, or a doorway, or a guest room. What I remembered was this kitchen, this light, those words, and being pleased with myself about a pause.
 
 I had built a company on a simple principle. When two numbers contradict each other, one of them is a mistake, and the mistake is usually somebody else's. I stood there for some time trying to decide whose mistake this was.
 
@@ -64,7 +64,7 @@ I had built a company on a simple principle. When two numbers contradict each ot
 
 “One second,” I said. I left her holding out the phone and walked down the hall to the guest room.
 
-The bed had been slept in. Only one side, the covers folded back in a neat triangle, which is how I fold them. At the foot of the bed was a small suitcase I did not recognize. On the nightstand was a chocolate wrapper from the airport in Zurich, folded into a tight square. I fold wrappers into squares. It is a habit from school. Nobody else in the house does it.
+The bed had been slept in. Only one side, the covers folded back in a neat triangle, which is how I fold them. At the foot of the bed was a small suitcase I did not recognize. On the nightstand was a chocolate wrapper from the airport in Zurich, folded into a tight square. I fold wrappers into squares. It is a habit from St. Albert's, where candy was not allowed and so the evidence had to be made very small, and I have done it ever since: on airplanes, in board meetings, once at a state dinner with a mint, while a man from the Commerce Department explained tariffs to me. Nobody else in the house does it.
 
 I stood there for a while. Then I unfolded the wrapper, which made it worse, and folded it again, and put it in my pocket.
 
@@ -92,6 +92,6 @@ Behind me, Teodoro's radio said something in Portuguese, and then a jingle for w
 
 It was the first real question she had asked me in two years. I knew it was two years because I remembered the last one. We were in the car, coming back from her sister's. She had asked whether I was happy. I had said, “Of course,” and then I had said something about the third quarter, which had been strong. She had said, “Okay.” I had thought the conversation went well.
 
-She was looking straight at me now. She had stopped scrolling. Her thumb was resting on the edge of the phone.
+She was looking straight at me now. She had stopped scrolling, and her thumb was resting on the edge of the phone, lightly, the way it used to rest on the bow before she began.
 
 “Frank. What did you do?”

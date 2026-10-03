@@ -29,9 +29,7 @@ variants: []
 
 ## Three Hundred Feet
 
-The driveway was three hundred feet of heated limestone. I had driven it perhaps four thousand times. I had never once walked it.
-
-Walking is slow. When you walk, things can watch you coming.
+The driveway was three hundred feet of heated limestone. I had driven it perhaps four thousand times and never once walked it, because walking is slow, and when you walk, things can watch you coming.
 
 The limestone was warm through my shoes. I had paid to have it heated so it would never ice, in a city where it does not ice. I spent most of the first hundred feet on that. It is a strange thing to discover at forty-three that you have spent a great deal of money protecting yourself from weather that was never going to come.
 
@@ -49,7 +47,7 @@ Same pause before “early.”
 
 “This is a private road,” I said.
 
-“Yeah, I know. Sorry. We'll be out of your way in a second.” He sounded tired. He sounded like a man at the end of a night shift, which I suppose he was. “Somebody asked me to drop this off. I don't know what it is. I don't ask.”
+“Yeah, I know. Sorry. We'll be out of your way in a second.” He sounded tired, like a man at the end of a night shift, which I suppose he was. “Somebody asked me to drop this off. I don't know what it is. I don't ask.”
 
 “Who asked you?”
 

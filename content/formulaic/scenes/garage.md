@@ -44,7 +44,7 @@ variants:
 
     I had never said those three words to her. I am fairly sure I had not said them to anyone since I was seven, sitting in a damp chair, waiting for the tablecloth to be changed.
 
-    Gabriella reached across the marble and put her hand on mine. It was warm. I had forgotten that. No. That isn't true. I had stopped checking.
+    Gabriella reached across the marble and put her hand on mine. It was warm. I had forgotten that. No, that isn't true; I had stopped checking, which is different, although I had been doing it for so long that from the inside it felt the same.
 
     “Okay,” she said.
 
@@ -100,7 +100,7 @@ variants:
   when:
     card: took
   text: |-
-    I took the card. It was heavier than a card has any right to be. Good stock. Someone had paid for it.
+    I took the card. It was heavier than a card has any right to be, good stock, the kind my mother used for place cards, and I remember thinking, absurdly, that whoever was ruining my life had at least spent money doing it.
 
     The window went up. The Suburban backed down my driveway in a careful three-point turn, signaled, although there was nobody to signal to, and rolled away at exactly the speed limit.
 
@@ -154,7 +154,7 @@ variants:
   when:
     office_choice: walked
   text: |-
-    I turned around and walked out. Nobody stopped me. That was almost worse. It meant they knew where I would go.
+    I turned around and walked out. Nobody stopped me, which was almost worse, because it meant they knew where I would go.
 
     In the revolving door I passed a woman carrying a tray of four coffees. She said “Morning” without looking up, and I said “Morning,” and for a second I was a man going to work.
   priority: 10
@@ -205,7 +205,7 @@ I did not go back into the house. I went straight to the garage. I tell myself i
 
 ## The Car
 
-My car was a G63. Black, square, armored to a standard the brochure described as “discreet.” It was the only thing I owned that had never disappointed me. It did exactly what I told it to do. It was built like a bank vault, and it drove like one.
+My car was a G63. Black, square, armored to a standard the brochure described as “discreet.” It was the only thing I owned that had never disappointed me. No. The second. I should be accurate; the first was the house. It has occurred to me since that neither of them was a person. The car did exactly what I told it to do. It was built like a bank vault, and it drove like one.
 
 I sat in it with the engine off for perhaps a minute. It is the only room in my life where nobody can see me unless I let them. I have made calls from that seat that moved markets. I have also, twice, sat there and done nothing at all, which I have never told anyone.
 
@@ -221,7 +221,7 @@ A crane operator named Luis Ortega had been hurt when a container was set down i
 
 The instructions had been sent from an administrator account named fgaas. The account had logged in from an address in Zurich.
 
-I did not have an administrator account. I had not logged into anything myself in years. I have people who log in.
+I did not have an administrator account. I had not logged into anything myself in years; I have people who log in.
 
 I read the injured man's name several times. I did not know what fair condition meant, so I looked it up. It means vital signs are stable and the patient is conscious, but may be uncomfortable.
 
@@ -243,7 +243,7 @@ I looked up the nearest hospital to the port and called it. A man answered and s
 
 It was the first time in many years that I had called somewhere and been told no by a person who did not know who I was. It was oddly restful.
 
-As I pulled out, something moved in the rearview mirror. A jacket. A grin. Then it was only the road behind me.
+When I looked up, something moved in the rearview mirror, a jacket and a grin, and then it was only the road behind me.
 
 Before I could pull out, the phone buzzed with a text from Kendra, my assistant.
 

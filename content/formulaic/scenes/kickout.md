@@ -67,7 +67,7 @@ A bus pulled up behind us and honked. A long one. The driver had a very reasonab
 
 “For the next ten minutes.” He thought about it. “Maybe fifteen.”
 
-I closed his door. It was not a decision. My body did it before I was consulted. My body, it turned out, had opinions. It had been keeping them to itself for forty-three years.
+I closed his door. It was not a decision; my body did it before I was consulted. My body, it turned out, had opinions, and had been keeping them to itself for forty-three years, like a good employee, right up until the morning he doesn't.
 
 “What kind of name is that?”
 
