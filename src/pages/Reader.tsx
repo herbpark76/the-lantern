@@ -3,7 +3,7 @@ import { supabase, type Playthrough, type Scene, type Chapter, type Variant, typ
 import { useAuth } from "@/lib/auth";
 import { useRouter } from "@/lib/router";
 import {
-  renderChapters, markdownToHtml, getAvailableChoices, applySets, getChoiceTallyPercent,
+  renderChapters, markdownToHtml, getAvailableChoices, applySets, getChoiceTallyPercent, matchesWhen,
 } from "@/lib/content";
 import { StoryMap } from "@/components/StoryMap";
 import { ArrowLeft, ChevronRight, Users, CheckCircle, Loader2, Home, BookOpen } from "lucide-react";
@@ -22,7 +22,7 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
   const [variants, setVariants] = useState<Variant[]>([]);
   const [allChoices, setAllChoices] = useState<Choice[]>([]);
   const [allScenes, setAllScenes] = useState<Scene[]>([]);
-  const [steps, setSteps] = useState<Array<{ id: string; scene_key: string; choice_key: string | null }>>([]);
+  const [steps, setSteps] = useState<Array<{ id: string; scene_key: string; choice_key: string | null; timeline: number }>>([]);
   const [tallies, setTallies] = useState<ChoiceTally[]>([]);
   const [loading, setLoading] = useState(true);
   const [choosing, setChoosing] = useState(false);
@@ -50,7 +50,7 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
       .maybeSingle();
     setStorySettings((storyData as { settings: typeof storySettings })?.settings ?? null);
 
-    const [sceneRes, chaptersRes, variantsRes, choicesRes, scenesRes, stepsRes, talliesRes] = await Promise.all([
+    const [sceneRes, chaptersRes, variantsRes, choicesRes, scenesRes, stepsRes, talliesRes, allChaptersRes, allChoicesRes] = await Promise.all([
       supabase.from("scenes").select("*").eq("story_slug", slug).eq("key", ptData.current_scene_key).maybeSingle(),
       supabase.from("chapters").select("*").eq("story_slug", slug).eq("scene_key", ptData.current_scene_key).order("position"),
       supabase.from("variants").select("*").eq("story_slug", slug).eq("scene_key", ptData.current_scene_key),
@@ -58,6 +58,8 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
       supabase.from("scenes").select("*").eq("story_slug", slug),
       supabase.from("playthrough_steps").select("*").eq("playthrough_id", playthroughId).order("step_no"),
       supabase.from("choice_tallies").select("*").eq("story_slug", slug),
+      supabase.from("chapters").select("*").eq("story_slug", slug).order("position"),
+      supabase.from("choices").select("*").eq("story_slug", slug),
     ]);
 
     const currentScene = sceneRes.data as Scene | null;
@@ -66,9 +68,51 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
     setVariants((variantsRes.data as Variant[]) ?? []);
     setAllChoices((choicesRes.data as Choice[]) ?? []);
     setAllScenes((scenesRes.data as Scene[]) ?? []);
-    setSteps((stepsRes.data as Array<{ id: string; scene_key: string; choice_key: string | null }>) ?? []);
+    setSteps((stepsRes.data as Array<{ id: string; scene_key: string; choice_key: string | null; timeline: number }>) ?? []);
     setTallies((talliesRes.data as ChoiceTally[]) ?? []);
-    setChapterOffset((stepsRes.data as Array<{ step_no: number }>)?.length ?? 0);
+
+    const settings = (storyData as { settings: typeof storySettings })?.settings ?? null;
+
+    const allChapters = (allChaptersRes.data as Chapter[]) ?? [];
+    const allChoicesAll = (allChoicesRes.data as Choice[]) ?? [];
+    const stepsData = (stepsRes.data as Array<{ scene_key: string; choice_key: string | null; timeline: number }>) ?? [];
+
+    const chaptersByScene = new Map<string, Chapter[]>();
+    for (const ch of allChapters) {
+      const arr = chaptersByScene.get(ch.scene_key) ?? [];
+      arr.push(ch);
+      chaptersByScene.set(ch.scene_key, arr);
+    }
+
+    const choicesByKey = new Map<string, Choice>();
+    for (const c of allChoicesAll) {
+      choicesByKey.set(`${c.scene_key}:${c.key}`, c);
+    }
+
+    let replayFlags: Record<string, unknown> = {};
+    let replayTimeline = 1;
+    let offset = 0;
+
+    for (const step of stepsData) {
+      const sceneChapters = chaptersByScene.get(step.scene_key) ?? [];
+      const visibleCount = sceneChapters.filter(
+        (ch) => matchesWhen(ch.when ?? {}, replayFlags, replayTimeline)
+      ).length;
+      offset += visibleCount;
+
+      if (step.choice_key) {
+        const choice = choicesByKey.get(`${step.scene_key}:${step.choice_key}`);
+        if (choice) {
+          const { flags: newFlags, incrementTimeline } = applySets(
+            choice.sets, replayFlags, settings?.timelines ?? false
+          );
+          replayFlags = newFlags;
+          if (incrementTimeline) replayTimeline += 1;
+        }
+      }
+    }
+
+    setChapterOffset(offset);
     setLoading(false);
   }, [slug, playthroughId]);
 
@@ -155,7 +199,6 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
 
     // Reload to show next scene
     setLoading(true);
-    setChapterOffset(nextStepNo + 1);
     await loadData();
     setChoosing(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
