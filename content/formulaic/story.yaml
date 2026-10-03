@@ -8,3 +8,8 @@ settings:
   crowd_split: true
   map: fog
   accent_color: "#c2a46a"
+  narration:
+    voice_id: kNjmAhXxYgxjF0oyxw4c
+    voice_name: Matthew
+    model_id: eleven_v4
+    manifest: /audio/formulaic/manifest.json
