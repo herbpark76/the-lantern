@@ -1,12 +1,13 @@
 import { useEffect, useState, useCallback } from "react";
-import { supabase, type Story, type Scene, type Choice, type Chapter, type Variant, type Flag, type BibleEntry, type SyncRun, type ChoiceTally, type Playthrough, type Profile } from "@/lib/supabase";
+import { supabase, type Story, type Scene, type Choice, type Chapter, type Variant, type Flag, type BibleEntry, type SyncRun, type ChoiceTally, type Playthrough, type Profile, type NarrationClip } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
 import { useRouter } from "@/lib/router";
 import { renderChapters, markdownToHtml, getAvailableChoices, applySets } from "@/lib/content";
+import { fetchManifest } from "@/lib/narration";
 import {
   Settings, RefreshCw, Map as MapIcon, Eye, GitPullRequest, BookOpen, BarChart3,
   Film, Users, Loader2, CheckCircle, XCircle, ExternalLink, ChevronRight,
-  MessageSquare, Send, X,
+  MessageSquare, Send, X, Headphones,
 } from "lucide-react";
 
 type StudioTab = "stories" | "map" | "preview" | "queue" | "bible" | "tallies" | "directors" | "readers";
@@ -122,8 +123,27 @@ function StoriesTab({ stories, onStoriesChanged }: { stories: Story[]; onStories
   const [syncing, setSyncing] = useState<string | null>(null);
   const [syncResults, setSyncResults] = useState<Record<string, { ok: boolean; errors: string[] }>>({});
   const [syncAllRunning, setSyncAllRunning] = useState(false);
+  const [narrationClips, setNarrationClips] = useState<NarrationClip[]>([]);
+  const [manifestSegments, setManifestSegments] = useState<Record<string, number>>({});
 
   const authToken = session?.access_token ?? import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+  useEffect(() => {
+    supabase.from("narration_clips").select("*").then(({ data }) => {
+      setNarrationClips((data as NarrationClip[]) ?? []);
+    });
+
+    // Fetch manifests for stories that have narration configured
+    for (const story of stories) {
+      const manifestPath = story.settings?.narration?.manifest;
+      if (!manifestPath) continue;
+      fetchManifest(manifestPath).then((m) => {
+        if (m) {
+          setManifestSegments((prev) => ({ ...prev, [story.slug]: Object.keys(m.segments).length }));
+        }
+      });
+    }
+  }, [stories]);
 
   const handleSync = async (slug: string) => {
     setSyncing(slug);
@@ -262,6 +282,34 @@ function StoriesTab({ stories, onStoriesChanged }: { stories: Story[]; onStories
                 </p>
               </div>
             </div>
+
+            {/* Narration status */}
+            {story.settings?.narration && (
+              <div className="flex items-center gap-3 mb-4 text-xs font-sans p-3 bg-ink-100 dark:bg-ink-800 rounded-lg">
+                <Headphones size={14} className="text-accent-500" />
+                <span className="text-ink-600 dark:text-ink-300">
+                  {story.settings.narration.voice_name}
+                </span>
+                <span className="text-ink-400">·</span>
+                <span className="text-ink-500 dark:text-ink-400">
+                  {manifestSegments[story.slug] ?? 0} recorded segments
+                </span>
+                <span className="text-ink-400">·</span>
+                <span className="text-ink-500 dark:text-ink-400">
+                  {narrationClips.filter((c) => c.story_slug === story.slug).length} generated clips
+                </span>
+                <span className="text-ink-400">·</span>
+                <span className="text-ink-500 dark:text-ink-400">
+                  {(() => {
+                    const thirtyDaysAgo = new Date();
+                    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+                    return narrationClips
+                      .filter((c) => c.story_slug === story.slug && new Date(c.created_at) >= thirtyDaysAgo)
+                      .reduce((sum, c) => sum + c.chars, 0);
+                  })()} chars this month
+                </span>
+              </div>
+            )}
 
             {syncResults[story.slug] && (
               <div className={`mb-3 text-sm font-sans rounded-lg px-3 py-2 ${

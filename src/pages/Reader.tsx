@@ -1,20 +1,28 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { supabase, type Playthrough, type Scene, type Chapter, type Variant, type Choice, type ChoiceTally } from "@/lib/supabase";
+import { supabase, type Playthrough, type Scene, type Chapter, type Variant, type Choice, type ChoiceTally, type StorySettings } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
 import { useRouter } from "@/lib/router";
 import {
   renderChapters, markdownToHtml, getAvailableChoices, applySets, getChoiceTallyPercent, matchesWhen,
 } from "@/lib/content";
 import { StoryMap } from "@/components/StoryMap";
-import { ArrowLeft, ChevronRight, Users, CheckCircle, Loader2, Home, BookOpen } from "lucide-react";
+import { NarrationPlayer } from "@/components/NarrationPlayer";
+import {
+  extractNarrationItems, fetchManifest, stopBrowserSpeech,
+  type NarrationItem, type NarrationManifest,
+} from "@/lib/narration";
+import { ArrowLeft, ChevronRight, Users, CheckCircle, Loader2, Home, BookOpen, Headphones } from "lucide-react";
 
 interface ReaderProps {
   slug: string;
   playthroughId: string;
 }
 
+const LISTEN_KEY = "narration:listen";
+const SPEED_KEY = "narration:speed";
+
 export function ReaderPage({ slug, playthroughId }: ReaderProps) {
-  const { profile } = useAuth();
+  const { profile, session } = useAuth();
   const { navigate } = useRouter();
   const [playthrough, setPlaythrough] = useState<Playthrough | null>(null);
   const [scene, setScene] = useState<Scene | null>(null);
@@ -28,9 +36,22 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
   const [choosing, setChoosing] = useState(false);
   const [crowdMsg, setCrowdMsg] = useState<string | null>(null);
   const [chapterOffset, setChapterOffset] = useState(0);
-  const [storySettings, setStorySettings] = useState<{ timelines: boolean; crowd_split: boolean; map: "fog" | "full" | "off"; accent_color: string } | null>(null);
+  const [storySettings, setStorySettings] = useState<StorySettings | null>(null);
   const crowdTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [renderedChapters, setRenderedChapters] = useState<Array<{ number: number; title: string; html: string }>>([]);
+
+  // Narration state
+  const [listenOn, setListenOn] = useState(() => localStorage.getItem(LISTEN_KEY) === "true");
+  const [narrationSpeed, setNarrationSpeed] = useState(() => {
+    const s = localStorage.getItem(SPEED_KEY);
+    return s ? parseFloat(s) : 1;
+  });
+  const [manifest, setManifest] = useState<NarrationManifest | null>(null);
+  const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null);
+  const narrationItemsRef = useRef<NarrationItem[]>([]);
+
+  const narrationConfigured = !!storySettings?.narration;
+  const manifestUrl = storySettings?.narration?.manifest ?? null;
 
   const loadData = useCallback(async () => {
     const { data: pt } = await supabase
@@ -48,7 +69,8 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
       .select("settings")
       .eq("slug", slug)
       .maybeSingle();
-    setStorySettings((storyData as { settings: typeof storySettings })?.settings ?? null);
+    const settings = (storyData as { settings?: StorySettings })?.settings ?? null;
+    setStorySettings(settings);
 
     const [sceneRes, chaptersRes, variantsRes, choicesRes, scenesRes, stepsRes, talliesRes, allChaptersRes, allChoicesRes] = await Promise.all([
       supabase.from("scenes").select("*").eq("story_slug", slug).eq("key", ptData.current_scene_key).maybeSingle(),
@@ -70,8 +92,6 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
     setAllScenes((scenesRes.data as Scene[]) ?? []);
     setSteps((stepsRes.data as Array<{ id: string; scene_key: string; choice_key: string | null; timeline: number }>) ?? []);
     setTallies((talliesRes.data as ChoiceTally[]) ?? []);
-
-    const settings = (storyData as { settings: typeof storySettings })?.settings ?? null;
 
     const allChapters = (allChaptersRes.data as Chapter[]) ?? [];
     const allChoicesAll = (allChoicesRes.data as Choice[]) ?? [];
@@ -120,6 +140,12 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
     loadData();
   }, [loadData]);
 
+  // Load manifest when narration is configured
+  useEffect(() => {
+    if (!manifestUrl) { setManifest(null); return; }
+    fetchManifest(manifestUrl).then(setManifest);
+  }, [manifestUrl]);
+
   // Render chapters when data changes
   useEffect(() => {
     if (!scene || !playthrough) return;
@@ -131,7 +157,24 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
       chapterOffset
     ).map((ch) => ({ ...ch, html: markdownToHtml(ch.html) }));
     setRenderedChapters(rendered);
+
+    // Build narration items for the player
+    narrationItemsRef.current = extractNarrationItems(rendered);
+    setHighlightedIndex(null);
   }, [chapters, variants, playthrough, chapterOffset, scene]);
+
+  // Persist listen/speed
+  useEffect(() => { localStorage.setItem(LISTEN_KEY, String(listenOn)); }, [listenOn]);
+  useEffect(() => { localStorage.setItem(SPEED_KEY, String(narrationSpeed)); }, [narrationSpeed]);
+
+  // Scroll highlighted item into view
+  useEffect(() => {
+    if (highlightedIndex === null) return;
+    const el = document.querySelector(`[data-narration-idx="${highlightedIndex}"]`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [highlightedIndex]);
 
   const reachedScenes = new Set<string>();
   if (playthrough) reachedScenes.add(playthrough.current_scene_key);
@@ -140,6 +183,7 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
   const handleChoice = async (choice: Choice) => {
     if (!playthrough || !profile || choosing) return;
     setChoosing(true);
+    stopBrowserSpeech();
 
     const { flags: newFlags, incrementTimeline } = applySets(
       choice.sets,
@@ -149,7 +193,6 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
     const newTimeline = incrementTimeline ? playthrough.timeline + 1 : playthrough.timeline;
     const nextStepNo = (steps?.length ?? 0);
 
-    // Save step
     await supabase.from("playthrough_steps").insert({
       playthrough_id: playthrough.id,
       step_no: nextStepNo,
@@ -158,7 +201,6 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
       timeline: playthrough.timeline,
     });
 
-    // Crowd split feedback
     if (storySettings?.crowd_split) {
       const pct = getChoiceTallyPercent(
         tallies.map((t) => ({ scene_key: t.scene_key, choice_key: t.choice_key, total_count: t.total_count })),
@@ -172,7 +214,6 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
       }
     }
 
-    // Check if next scene is ending
     const nextScene = allScenes.find((s) => s.key === choice.to_scene_key);
     const isEnding = nextScene?.is_ending ?? false;
 
@@ -197,12 +238,21 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
       return;
     }
 
-    // Reload to show next scene
     setLoading(true);
     await loadData();
     setChoosing(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
+
+  const handleParagraphTap = (itemIndex: number) => {
+    if (!narrationConfigured) return;
+    setListenOn(true);
+    setHighlightedIndex(itemIndex);
+  };
+
+  // Build a map from data-narration-idx to rendered HTML for each chapter
+  const narrationItems = narrationItemsRef.current;
+  let narrationItemCounter = 0;
 
   if (loading) {
     return (
@@ -226,15 +276,27 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
   const availableChoices = getAvailableChoices(allChoices, playthrough.flags, playthrough.timeline);
   const isCompleted = !!playthrough.completed_at;
   const accent = storySettings?.accent_color ?? "#c97b3a";
+  const authToken = session?.access_token ?? import.meta.env.VITE_SUPABASE_ANON_KEY;
 
   return (
     <div className="min-h-[calc(100vh-3.5rem)]">
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8">
+      <div className={`max-w-2xl mx-auto px-4 sm:px-6 py-8 ${listenOn ? "pb-24" : ""}`}>
         {/* Top bar */}
         <div className="flex items-center justify-between mb-6">
-          <button onClick={() => navigate(`/story/${slug}`)} className="btn-ghost !px-2">
-            <ArrowLeft size={16} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => navigate(`/story/${slug}`)} className="btn-ghost !px-2">
+              <ArrowLeft size={16} />
+            </button>
+            {narrationConfigured && (
+              <button
+                onClick={() => setListenOn((v) => !v)}
+                className={`btn-ghost !px-3 !text-sm ${listenOn ? "text-accent-600 dark:text-accent-400" : ""}`}
+              >
+                <Headphones size={16} />
+                {listenOn ? "Listening" : "Listen"}
+              </button>
+            )}
+          </div>
           {storySettings?.timelines && (
             <div className="text-xs font-sans text-ink-400">
               Timeline {playthrough.timeline}
@@ -252,19 +314,39 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
 
         {/* Chapters */}
         <div className="prose-reader mx-auto">
-          {renderedChapters.map((ch) => (
-            <div key={ch.number} className="mb-8 animate-fade-in">
-              {ch.title && (
-                <h2 className="chapter-title flex items-baseline gap-2">
-                  <span className="text-xs font-sans text-ink-400 tabular-nums">
-                    {String(ch.number).padStart(2, "0")}
-                  </span>
-                  {ch.title}
-                </h2>
-              )}
-              <div dangerouslySetInnerHTML={{ __html: ch.html }} />
-            </div>
-          ))}
+          {renderedChapters.map((ch) => {
+            const chapterStartItem = narrationItemCounter;
+
+            // Build HTML with data-narration-idx on each element
+            let chapterHtml = "";
+            if (ch.title) {
+              chapterHtml += `<h2 class="chapter-title flex items-baseline gap-2" data-narration-idx="${narrationItemCounter}"><span class="text-xs font-sans text-ink-400 tabular-nums">${String(ch.number).padStart(2, "0")}</span>${ch.title}</h2>`;
+              narrationItemCounter++;
+            }
+            const paras = ch.html.split(/<p>/).slice(1);
+            for (const para of paras) {
+              const inner = para.replace(/<\/p>/, "");
+              const isHighlighted = highlightedIndex === narrationItemCounter;
+              chapterHtml += `<p data-narration-idx="${narrationItemCounter}"${isHighlighted ? ` style="background-color: var(--narration-highlight, rgba(201,123,58,0.12)); border-radius: 4px; padding: 2px 4px; margin: -2px -4px;"` : ""}>${inner}</p>`;
+              narrationItemCounter++;
+            }
+
+            return (
+              <div key={ch.number} className="mb-8 animate-fade-in">
+                <div
+                  dangerouslySetInnerHTML={{ __html: chapterHtml }}
+                  onClick={(e) => {
+                    if (!listenOn) return;
+                    const target = (e.target as HTMLElement).closest("[data-narration-idx]");
+                    if (target) {
+                      const idx = parseInt(target.getAttribute("data-narration-idx") || "0", 10);
+                      handleParagraphTap(idx);
+                    }
+                  }}
+                />
+              </div>
+            );
+          })}
         </div>
 
         {/* Crowd split message */}
@@ -324,6 +406,22 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
         </div>
       </div>
 
+      {/* Narration player */}
+      {listenOn && narrationConfigured && narrationItems.length > 0 && (
+        <NarrationPlayer
+          items={narrationItems}
+          manifest={manifest}
+          manifestUrl={manifestUrl}
+          storySlug={slug}
+          authToken={authToken}
+          speed={narrationSpeed}
+          onSpeedChange={setNarrationSpeed}
+          onClose={() => { setListenOn(false); stopBrowserSpeech(); }}
+          onHighlight={setHighlightedIndex}
+          startIndex={highlightedIndex ?? 0}
+        />
+      )}
+
       {/* Map */}
       {storySettings && storySettings.map !== "off" && (
         <StoryMap
@@ -339,5 +437,3 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
     </div>
   );
 }
-
-

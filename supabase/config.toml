@@ -9,3 +9,7 @@ entrypoint = "./functions/edit-request/index.ts"
 [functions.list-edit-requests]
 verify_jwt = true
 entrypoint = "./functions/list-edit-requests/index.ts"
+
+[functions.narrate]
+verify_jwt = true
+entrypoint = "./functions/narrate/index.ts"

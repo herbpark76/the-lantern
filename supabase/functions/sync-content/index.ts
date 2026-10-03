@@ -25,6 +25,12 @@ interface StoryYaml {
     crowd_split: boolean;
     map: "fog" | "full" | "off";
     accent_color: string;
+    narration?: {
+      voice_id: string;
+      voice_name: string;
+      model_id: string;
+      manifest?: string;
+    };
   };
 }
 

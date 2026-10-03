@@ -10,11 +10,19 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
+export type NarrationSettings = {
+  voice_id: string;
+  voice_name: string;
+  model_id: string;
+  manifest?: string;
+};
+
 export type StorySettings = {
   timelines: boolean;
   crowd_split: boolean;
   map: "fog" | "full" | "off";
   accent_color: string;
+  narration?: NarrationSettings;
 };
 
 export type StoryStatus = "draft" | "published";
@@ -147,4 +155,12 @@ export interface ChoiceTally {
   choice_key: string;
   total_count: number;
   completed_count: number;
+}
+
+export interface NarrationClip {
+  story_slug: string;
+  text_hash: string;
+  chars: number;
+  created_at: string;
+  created_by: string | null;
 }
