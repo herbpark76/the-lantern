@@ -125,11 +125,11 @@ export async function narrateViaEdgeFunction(
   }
 }
 
-export function speakViaBrowser(text: string): void {
+export function speakViaBrowser(text: string, rate = 1.1): void {
   if (typeof window === "undefined" || !window.speechSynthesis) return;
   window.speechSynthesis.cancel();
   const utter = new SpeechSynthesisUtterance(text);
-  utter.rate = 1;
+  utter.rate = rate;
   window.speechSynthesis.speak(utter);
 }
 

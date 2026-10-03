@@ -231,7 +231,7 @@ export function NarrationPlayer({
     setCurrentPlayback(ttsPlayback);
     setUsingBrowserTTS(true);
     setIsPlaying(true);
-    speakViaBrowser(item.plainText);
+    speakViaBrowser(item.plainText, speedRef.current);
     ttsIntervalRef.current = setInterval(() => {
       if (typeof window !== "undefined" && !window.speechSynthesis.speaking) {
         if (ttsIntervalRef.current) {

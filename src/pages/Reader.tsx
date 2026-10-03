@@ -46,7 +46,7 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
   const [listenOn, setListenOn] = useState(() => localStorage.getItem(LISTEN_KEY) === "true");
   const [narrationSpeed, setNarrationSpeed] = useState(() => {
     const s = localStorage.getItem(SPEED_KEY);
-    return s ? parseFloat(s) : 1;
+    return s ? parseFloat(s) : 1.1;
   });
   const [manifest, setManifest] = useState<NarrationManifest | null>(null);
   const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null);
@@ -290,7 +290,7 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
 
   return (
     <div className="min-h-[calc(100vh-3.5rem)]">
-      <div className={`max-w-2xl mx-auto px-4 sm:px-6 py-8 ${listenOn ? "pb-24" : ""}`}>
+      <div className={`${readerSettings.width === "wide" ? "max-w-3xl" : readerSettings.width === "narrow" ? "max-w-lg" : "max-w-2xl"} mx-auto px-4 sm:px-6 py-8 ${listenOn ? "pb-24" : ""}`}>
         {/* Top bar */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
@@ -306,6 +306,12 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
                 {listenOn ? "Listening" : "Listen"}
               </button>
             )}
+            <ReadingSettingsPopover
+              settings={readerSettings}
+              onSizeChange={updateSize}
+              onSpacingChange={updateSpacing}
+              onWidthChange={updateWidth}
+            />
           </div>
           {storySettings?.timelines && (
             <div className="text-xs font-sans text-ink-400">
