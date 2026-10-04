@@ -133,3 +133,9 @@
     }
   }
 }
+
+@layer utilities {
+  .map-node-hover-ring:hover {
+    opacity: 0.3 !important;
+  }
+}

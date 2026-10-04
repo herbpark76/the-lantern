@@ -14,6 +14,8 @@ interface StoryMapProps {
   showTimelines: boolean;
   isOpen: boolean;
   onToggle: () => void;
+  clickableSceneKeys?: Set<string>;
+  onNodeClick?: (sceneKey: string) => void;
 }
 
 const GRID_X_SPACING = 70;
@@ -64,10 +66,14 @@ interface PathSegment {
 export function StoryMap({
   scenes, choices, mapMode, reachedScenes, steps, accentColor,
   currentSceneKey, currentTimeline, showTimelines, isOpen, onToggle,
+  clickableSceneKeys, onNodeClick,
 }: StoryMapProps) {
   const [recapScene, setRecapScene] = useState<string | null>(null);
 
   if (mapMode === "off") return null;
+
+  const clickable = clickableSceneKeys ?? new Set<string>();
+  const canNavigate = !!onNodeClick;
 
   const scenesWithCoords = scenes.filter((s) => s.map_x !== null && s.map_y !== null);
 
@@ -192,6 +198,14 @@ export function StoryMap({
   const sceneRecapSteps = (sceneKey: string) => steps.filter((s) => s.scene_key === sceneKey);
   const recapSceneData = recapScene ? scenes.find((s) => s.key === recapScene) : null;
 
+  const handleNodeClick = (node: GridNode) => {
+    if (canNavigate && clickable.has(node.key) && !node.isCurrent) {
+      onNodeClick!(node.key);
+    } else {
+      setRecapScene(node.key);
+    }
+  };
+
   const loopPath = (seg: PathSegment) => {
     const rightX = Math.max(seg.fromX, seg.toX) + 40;
     return `M ${seg.fromX} ${seg.fromY} C ${rightX} ${seg.fromY}, ${rightX} ${seg.toY}, ${seg.toX} ${seg.toY}`;
@@ -237,13 +251,29 @@ export function StoryMap({
           {visibleNodes.map((node) => {
             const r = node.dotR;
             const fill = node.isCurrent ? accentColor : "#5c5447";
+            const isClickable = canNavigate && clickable.has(node.key) && !node.isCurrent;
             return (
               <g key={node.key}>
                 {node.isCurrent && (
                   <circle cx={node.px} cy={node.py} r={RING_R} fill={accentColor} opacity={0.15} />
                 )}
-                <circle cx={node.px} cy={node.py} r={r} fill={fill}
-                  style={{ cursor: "pointer" }} onClick={() => setRecapScene(node.key)} />
+                {isClickable && (
+                  <circle
+                    cx={node.px} cy={node.py} r={DOT_R + 5}
+                    fill="none" stroke={accentColor} strokeWidth={1} opacity={0}
+                    className="map-node-hover-ring"
+                    style={{ transition: "opacity 150ms" }}
+                  />
+                )}
+                <circle
+                  cx={node.px} cy={node.py} r={r} fill={fill}
+                  style={{ cursor: isClickable ? "pointer" : "default" }}
+                  onClick={() => handleNodeClick(node)}
+                >
+                  {isClickable && (
+                    <title>{`Re-read from ${node.title}`}</title>
+                  )}
+                </circle>
               </g>
             );
           })}
@@ -251,6 +281,7 @@ export function StoryMap({
           {/* Layer 3: Labels on top with halo */}
           {visibleNodes.map((node) => {
             const label = truncate(node.title, LABEL_MAX_CHARS);
+            const isClickable = canNavigate && clickable.has(node.key) && !node.isCurrent;
             return (
               <text
                 key={`label-${node.key}`}
@@ -269,6 +300,7 @@ export function StoryMap({
                   stroke: "var(--map-bg)",
                   strokeWidth: HALO_WIDTH,
                   strokeLinejoin: "round",
+                  cursor: isClickable ? "pointer" : "default",
                 }}
                 dominantBaseline="middle"
               >

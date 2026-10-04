@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { supabase, type Story, type Playthrough } from "@/lib/supabase";
+import { supabase, type Story, type Playthrough, isStaff } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
 import { useRouter } from "@/lib/router";
-import { ArrowLeft, Play, RotateCcw, BookOpen, CheckCircle, Clock, Loader2 } from "lucide-react";
+import { ArrowLeft, Play, RotateCcw, BookOpen, CheckCircle, Clock, Loader2, Eye, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 
 interface StoryDetailProps {
   slug: string;
@@ -15,6 +15,8 @@ export function StoryDetailPage({ slug }: StoryDetailProps) {
   const [playthroughs, setPlaythroughs] = useState<Playthrough[]>([]);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
+  const [previewsOpen, setPreviewsOpen] = useState(false);
+  const [deletingPreview, setDeletingPreview] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -29,8 +31,10 @@ export function StoryDetailPage({ slug }: StoryDetailProps) {
     });
   }, [slug, profile]);
 
-  const activePlaythrough = playthroughs.find((p) => !p.completed_at);
-  const finishedPlaythroughs = playthroughs.filter((p) => p.completed_at);
+  const realPlaythroughs = playthroughs.filter((p) => !p.is_preview);
+  const previewPlaythroughs = playthroughs.filter((p) => p.is_preview);
+  const activePlaythrough = realPlaythroughs.find((p) => !p.completed_at);
+  const finishedPlaythroughs = realPlaythroughs.filter((p) => p.completed_at);
 
   const handleStart = async () => {
     if (!profile) {
@@ -79,11 +83,6 @@ export function StoryDetailPage({ slug }: StoryDetailProps) {
     if (!profile) return;
     setStarting(true);
 
-    if (activePlaythrough) {
-      await supabase.from("playthrough_steps").delete().eq("playthrough_id", activePlaythrough.id);
-      await supabase.from("playthroughs").delete().eq("id", activePlaythrough.id);
-    }
-
     let firstScene = story?.start_scene ?? null;
     if (!firstScene) {
       const { data: scenes } = await supabase
@@ -111,6 +110,14 @@ export function StoryDetailPage({ slug }: StoryDetailProps) {
     if (newPt) navigate(`/read/${slug}/${(newPt as Playthrough).id}`);
   };
 
+  const handleDeletePreview = async (ptId: string) => {
+    setDeletingPreview(ptId);
+    await supabase.from("playthrough_steps").delete().eq("playthrough_id", ptId);
+    await supabase.from("playthroughs").delete().eq("id", ptId);
+    setDeletingPreview(null);
+    setPlaythroughs((prev) => prev.filter((p) => p.id !== ptId));
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -131,6 +138,7 @@ export function StoryDetailPage({ slug }: StoryDetailProps) {
   }
 
   const accent = story.settings?.accent_color ?? "#c97b3a";
+  const staff = isStaff(profile);
 
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 py-12 animate-fade-in">
@@ -193,6 +201,48 @@ export function StoryDetailPage({ slug }: StoryDetailProps) {
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {staff && previewPlaythroughs.length > 0 && (
+        <div className="mt-8">
+          <button
+            onClick={() => setPreviewsOpen((v) => !v)}
+            className="flex items-center gap-2 text-sm font-sans text-ink-500 dark:text-ink-400 hover:text-ink-700 dark:hover:text-ink-300 transition-colors"
+          >
+            {previewsOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            <Eye size={16} />
+            Previews ({previewPlaythroughs.length})
+          </button>
+          {previewsOpen && (
+            <div className="mt-3 space-y-2">
+              {previewPlaythroughs.map((pt) => (
+                <div
+                  key={pt.id}
+                  className="card p-3 flex items-center justify-between"
+                >
+                  <button
+                    onClick={() => navigate(`/read/${slug}/${pt.id}`)}
+                    className="flex items-center gap-2 text-sm font-sans text-ink-600 dark:text-ink-400 flex-1 text-left"
+                  >
+                    <Eye size={14} className="text-ink-400" />
+                    <span className="truncate">{pt.current_scene_key}</span>
+                    <span className="text-xs text-ink-400">
+                      {new Date(pt.started_at).toLocaleDateString()}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => handleDeletePreview(pt.id)}
+                    disabled={deletingPreview === pt.id}
+                    className="btn-ghost !p-1.5 text-ink-400 hover:text-error-500"
+                    aria-label="Delete preview"
+                  >
+                    {deletingPreview === pt.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
