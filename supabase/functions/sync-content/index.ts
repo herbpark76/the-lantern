@@ -14,32 +14,13 @@ const GITHUB_BRANCH = Deno.env.get("GITHUB_BRANCH") ?? "main";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
-interface ChapterYamlDef {
-  letter: string;
-  title: string;
-  start_scene?: string;
-  scenes?: string[];
-}
-
 interface StoryYaml {
   title: string;
   blurb: string;
   author_email: string;
   status: "draft" | "published";
   start_scene?: string;
-  settings: {
-    timelines: boolean;
-    crowd_split: boolean;
-    map: "fog" | "full" | "off";
-    accent_color: string;
-    narration?: {
-      voice_id: string;
-      voice_name: string;
-      model_id: string;
-      manifest?: string;
-    };
-    chapters?: ChapterYamlDef[];
-  };
+  settings: Record<string, unknown>;
 }
 
 interface FlagDef {
