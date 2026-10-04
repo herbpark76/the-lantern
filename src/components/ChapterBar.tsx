@@ -24,7 +24,8 @@ export function ChapterBar({
         const isWritten = !!ch.start_scene;
         const isCurrent = currentChapter?.letter === ch.letter;
         const isReached = ch.scenes?.some((s) => reachedScenes.has(s)) || reachedScenes.has(ch.start_scene ?? "");
-        const isClickable = isWritten && (isStaff || isReached) && !isCurrent;
+        const isClickable = isWritten && !isCurrent && (isStaff || isReached);
+        const isCurrentClickable = isCurrent && isStaff;
 
         const tooltip = isWritten
           ? `${ch.letter} — ${ch.title}`
@@ -33,8 +34,8 @@ export function ChapterBar({
         return (
           <button
             key={ch.letter}
-            disabled={!isClickable}
-            onClick={() => isClickable && onChapterClick(ch)}
+            disabled={!isClickable && !isCurrentClickable}
+            onClick={() => (isClickable || isCurrentClickable) && onChapterClick(ch)}
             title={tooltip}
             className="font-serif text-sm tracking-widest uppercase transition-colors select-none"
             style={{
@@ -45,7 +46,7 @@ export function ChapterBar({
                   : isReached || isStaff
                     ? "var(--ink-600, #5c5447)"
                     : "var(--ink-300, #c4bfb8)",
-              cursor: isClickable ? "pointer" : "default",
+              cursor: isClickable || isCurrentClickable ? "pointer" : "default",
               fontWeight: isCurrent ? 600 : 400,
             }}
           >

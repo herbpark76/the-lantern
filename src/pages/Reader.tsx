@@ -26,7 +26,7 @@ const SPEED_KEY = "narration:speed";
 
 interface JumpTarget {
   sceneKey: string;
-  mode: "reader" | "staff";
+  mode: "reader" | "staff" | "staff_menu";
   chapter: ChapterDef | null;
 }
 
@@ -47,6 +47,8 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
   const [chapterOffset, setChapterOffset] = useState(0);
   const [storySettings, setStorySettings] = useState<StorySettings | null>(null);
   const [allFlags, setAllFlags] = useState<Flag[]>([]);
+  const [allVariants, setAllVariants] = useState<Variant[]>([]);
+  const [allChaptersData, setAllChaptersData] = useState<Chapter[]>([]);
   const crowdTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [renderedChapters, setRenderedChapters] = useState<Array<{ number: number; title: string; html: string }>>([]);
   const { settings: readerSettings, updateSize, updateSpacing, updateWidth } = useReaderSettings(profile);
@@ -106,7 +108,7 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
     const settings = (storyData as { settings?: StorySettings })?.settings ?? null;
     setStorySettings(settings);
 
-    const [sceneRes, chaptersRes, variantsRes, choicesRes, scenesRes, stepsRes, talliesRes, allChaptersRes, allChoicesRes, flagsRes] = await Promise.all([
+    const [sceneRes, chaptersRes, variantsRes, choicesRes, scenesRes, stepsRes, talliesRes, allChaptersRes, allChoicesRes, flagsRes, variantsAllRes, allChaptersAllRes] = await Promise.all([
       supabase.from("scenes").select("*").eq("story_slug", slug).eq("key", ptData.current_scene_key).maybeSingle(),
       supabase.from("chapters").select("*").eq("story_slug", slug).eq("scene_key", ptData.current_scene_key).order("position"),
       supabase.from("variants").select("*").eq("story_slug", slug).eq("scene_key", ptData.current_scene_key),
@@ -117,6 +119,8 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
       supabase.from("chapters").select("*").eq("story_slug", slug).order("position"),
       supabase.from("choices").select("*").eq("story_slug", slug),
       supabase.from("flags").select("*").eq("story_slug", slug),
+      supabase.from("variants").select("*").eq("story_slug", slug),
+      supabase.from("chapters").select("*").eq("story_slug", slug),
     ]);
 
     const currentScene = sceneRes.data as Scene | null;
@@ -128,6 +132,8 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
     setSteps((stepsRes.data as Array<{ id: string; scene_key: string; choice_key: string | null; timeline: number }>) ?? []);
     setTallies((talliesRes.data as ChoiceTally[]) ?? []);
     setAllFlags((flagsRes.data as Flag[]) ?? []);
+    setAllVariants((variantsAllRes.data as Variant[]) ?? []);
+    setAllChaptersData((allChaptersAllRes.data as Chapter[]) ?? []);
 
     const allChapters = (allChaptersRes.data as Chapter[]) ?? [];
     const allChoicesAll = (allChoicesRes.data as Choice[]) ?? [];
@@ -323,19 +329,16 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
     stopAudioBeforeNav();
 
     if (staff) {
-      // Staff: open preview panel for the chapter's start scene
-      const targetScene = allScenes.find((s) => s.key === chapter.start_scene);
-      if (targetScene) {
-        setJumpTarget({ sceneKey: chapter.start_scene, mode: "staff", chapter });
-      }
+      const isReached = reachedScenes.has(chapter.start_scene);
+      setJumpTarget({
+        sceneKey: chapter.start_scene,
+        mode: isReached ? "staff_menu" : "staff",
+        chapter,
+      });
     } else {
-      // Reader: find the first step that entered this chapter's start_scene
       const stepIdx = steps.findIndex((s) => s.scene_key === chapter.start_scene);
       if (stepIdx >= 0) {
-        const targetScene = allScenes.find((s) => s.key === chapter.start_scene);
-        if (targetScene) {
-          setJumpTarget({ sceneKey: chapter.start_scene, mode: "reader", chapter });
-        }
+        setJumpTarget({ sceneKey: chapter.start_scene, mode: "reader", chapter });
       }
     }
   };
@@ -345,28 +348,28 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
     if (sceneKey === playthrough?.current_scene_key) return;
     stopAudioBeforeNav();
 
-    const targetScene = allScenes.find((s) => s.key === sceneKey);
-    if (!targetScene) return;
-
-    // Find which chapter this scene belongs to
     const chapter = storyChapters.find(
       (ch) => ch.scenes?.includes(sceneKey) || ch.start_scene === sceneKey
     ) ?? null;
 
     if (staff) {
-      setJumpTarget({ sceneKey, mode: "staff", chapter });
+      const isReached = reachedScenes.has(sceneKey);
+      setJumpTarget({
+        sceneKey,
+        mode: isReached ? "staff_menu" : "staff",
+        chapter,
+      });
     } else {
       setJumpTarget({ sceneKey, mode: "reader", chapter });
     }
   };
 
   // --- Jump confirmation handler ---
-  const handleJumpConfirm = async (opts: { flags: Record<string, unknown>; timeline: number }) => {
+  const handleJumpConfirm = async (opts: { flags: Record<string, unknown>; timeline: number; asPreview: boolean }) => {
     if (!playthrough || !profile || !jumpTarget) return;
     setJumping(true);
 
-    if (jumpTarget.mode === "staff") {
-      // Create a preview playthrough at the target scene with chosen flags
+    if (opts.asPreview) {
       const { data: newPt } = await supabase
         .from("playthroughs")
         .insert({
@@ -487,25 +490,80 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
   const authToken = session?.access_token ?? import.meta.env.VITE_SUPABASE_ANON_KEY;
 
   const jumpTargetScene = jumpTarget ? allScenes.find((s) => s.key === jumpTarget.sceneKey) ?? null : null;
-  const jumpFlags = jumpTarget
-    ? (jumpTarget.mode === "staff"
-      ? allFlags.filter((f) => {
-          const targetScn = allScenes.find((s) => s.key === jumpTarget.sceneKey);
-          if (!targetScn) return false;
-          const targetFlagSet = new Set(targetScn.reads_flags);
-          // Also include flags read by later scenes in the same chapter
-          if (jumpTarget.chapter?.scenes) {
-            const chapterScenes = jumpTarget.chapter.scenes;
-            const sceneIdx = chapterScenes.indexOf(jumpTarget.sceneKey);
-            for (let i = sceneIdx; i < chapterScenes.length; i++) {
-              const scn = allScenes.find((s) => s.key === chapterScenes[i]);
-              if (scn) for (const rf of scn.reads_flags) targetFlagSet.add(rf);
-            }
+
+  // Compute comprehensive flag list for the preview panel.
+  // Includes: reads_flags from the target scene + later scenes in the same chapter,
+  //           flags referenced in variant `when` conditions and chapter `when` conditions,
+  //           minus flags SET by choices inside the chapter before they're read.
+  const jumpFlags = (() => {
+    if (!jumpTarget || !jumpTarget.chapter) return [];
+
+    const chapterScenes = jumpTarget.chapter.scenes ?? (jumpTarget.chapter.start_scene ? [jumpTarget.chapter.start_scene] : []);
+    const sceneIdx = chapterScenes.indexOf(jumpTarget.sceneKey);
+    if (sceneIdx < 0) return [];
+
+    // Scenes from the target onward in the chapter
+    const relevantSceneKeys = chapterScenes.slice(sceneIdx);
+
+    // Collect all flags READ by these scenes
+    const readFlagSet = new Set<string>();
+    for (const sk of relevantSceneKeys) {
+      const scn = allScenes.find((s) => s.key === sk);
+      if (scn) for (const rf of scn.reads_flags) readFlagSet.add(rf);
+    }
+
+    // Collect flags referenced in variant `when` conditions for these scenes
+    for (const v of allVariants) {
+      if (!relevantSceneKeys.includes(v.scene_key)) continue;
+      for (const key of Object.keys(v.when)) {
+        if (key === "timeline" || key === "timeline_gte") continue;
+        readFlagSet.add(key);
+      }
+    }
+
+    // Collect flags referenced in chapter `when` conditions for these scenes
+    for (const ch of allChaptersData) {
+      if (!relevantSceneKeys.includes(ch.scene_key)) continue;
+      for (const key of Object.keys(ch.when ?? {})) {
+        if (key === "timeline" || key === "timeline_gte") continue;
+        readFlagSet.add(key);
+      }
+    }
+
+    // Exclude flags SET by choices inside the chapter before they're read.
+    // Walk scenes in order; track which flags are SET; a flag is excluded if
+    // it's SET in a scene that comes before the first scene that READS it.
+    const flagsSetBeforeRead = new Set<string>();
+    const flagsReadInChapter = new Set<string>();
+    for (let i = sceneIdx; i < chapterScenes.length; i++) {
+      const sk = chapterScenes[i];
+      const scn = allScenes.find((s) => s.key === sk);
+      if (scn) {
+        for (const rf of scn.reads_flags) {
+          flagsReadInChapter.add(rf);
+        }
+      }
+      // Check choices in this scene for flags they SET
+      const sceneChoices = allChoices.filter((c) => c.scene_key === sk);
+      for (const choice of sceneChoices) {
+        for (const key of Object.keys(choice.sets)) {
+          if (key === "_new_timeline") continue;
+          // If this flag hasn't been read yet by any scene up to this point, it's set before read
+          if (!flagsReadInChapter.has(key)) {
+            flagsSetBeforeRead.add(key);
           }
-          return targetFlagSet.has(f.key);
-        })
-      : [])
-    : [];
+        }
+      }
+    }
+
+    // Final flag set: read flags minus set-before-read
+    const finalFlagSet = new Set<string>();
+    for (const f of readFlagSet) {
+      if (!flagsSetBeforeRead.has(f)) finalFlagSet.add(f);
+    }
+
+    return allFlags.filter((f) => finalFlagSet.has(f.key));
+  })();
 
   return (
     <div className="min-h-[calc(100vh-3.5rem)]">
