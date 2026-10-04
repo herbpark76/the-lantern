@@ -22,3 +22,15 @@
   type: boolean
   allowed_values: []
   description: Frank has walked down to the Suburban in some timeline. Survives loops, so later mornings can remember it.
+- key: o_father
+  type: choice
+  allowed_values: ["answered", "ignored", "texted", "none"]
+  description: "Chapter O: what Frank did when his father (alive in Zurich) called at 6:52."
+- key: o_jakarta
+  type: choice
+  allowed_values: ["defend", "suspend", "hal", "none"]
+  description: "Chapter O: how Frank handled the Jakarta downgrade at GAASCORE."
+- key: o_mia
+  type: choice
+  allowed_values: ["went", "refused", "card", "none"]
+  description: "Chapter O: Frank's answer to Mia's request at lunch."

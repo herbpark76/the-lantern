@@ -4,7 +4,7 @@ title: Downtown
 slug: Eastbound → Downtown · 8:20 a.m.
 act: 4
 is_bottleneck: true
-is_ending: true
+is_ending: false
 reads_flags:
 - gabriella_answer
 - card
@@ -13,7 +13,12 @@ reads_flags:
 map:
   x: 1
   y: 6
-choices: []
+choices:
+- key: wake
+  label: Wake up.
+  to: o_wake
+  sets: {}
+  requires: {}
 variants:
 - slot: name
   when: {}
