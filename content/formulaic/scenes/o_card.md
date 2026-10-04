@@ -9,7 +9,7 @@ reads_flags:
 - card
 map:
   x: 2
-  y: 12
+  y: 13
 choices:
 - key: go_home
   label: Go home.

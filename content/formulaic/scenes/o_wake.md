@@ -58,9 +58,51 @@ The last time I had heard the word Zurich, it had been attached to my name, by p
 
 My phone was on the nightstand. The date was the same date. I checked it twice. Under the time there was a number I did not recognize, in a clean gray font: 912. It was the kind of number that looks pleased with itself.
 
+## Grand Avenue
+
+I stood at the window and searched for my own death.
+
+I typed *Grand Avenue Los Angeles shooting* with my thumbs, which were not quite steady, and got a farmers' market, a road closure for a half marathon, and a review of a sandwich place that the reviewer described as “honest.” I typed *Gaas Grand Avenue*. I typed *Port of Los Angeles attack*. The port, according to everyone who had written about it that morning, was having an ordinary day. One article was about a sea lion that had climbed onto a buoy and refused to get off, and had been given a name by the harbor patrol, and the name was Gary.
+
+I typed *Gaas Dynamics*. The phone thought about it and asked whether I meant GAASCORE.
+
+I typed my own name.
+
+There was a great deal of me. There was a photograph of me at a conference in the mountains, in a navy sweater I have never owned, laughing at something with a man who had once been a prime minister. There was an encyclopedia entry. It said I was born in Connecticut, educated at St. Albert's and in Philadelphia, the son of the industrialist Malcolm Gaas (drainage pipe), and that I had founded GAASCORE in Zurich in 2009 with Harold Brenner. It said I lived on the lake with my wife, the cellist Gabriella Gaas, née Moretti. It did not say that I was dead. It did not say I had ever lived in Los Angeles. It did not mention a house made of glass.
+
+## Henderson
+
+I still knew the number of the house in Bel Air. I had never once dialed it myself, because there had never been anyone there I needed to call, but I knew it the way you know your blood type.
+
+I went out into the hall to make the call. I did not yet know there was anyone to wake.
+
+It rang four times.
+
+“Henderson residence.”
+
+It was a woman, older, a little out of breath, with a dishwasher going somewhere behind her. It was not yet ten at night in Los Angeles.
+
+“I'm sorry,” I said. “I'm trying to reach the Gaas house.”
+
+“The what, honey?”
+
+“Gaas. On Stone Canyon. The glass house.”
+
+“Oh, the glass one.” She laughed. “No, that's us. We've been here since '98. It was the Feldmans before. This is Carol. Who's this?”
+
+I knew the name. That morning, in a kitchen in Bel Air, Gabriella had told me about a party on Saturday at Carol Henderson's, at their place instead of the club, because they had redone the pool house and wanted everyone to see it. I had said okay. I had known which Carol.
+
+“Wrong number,” I said. “I'm sorry to have bothered you.”
+
+“Oh, you didn't bother me. I'm just doing the dishes. We redid the pool house, so everything's a mess.” She paused. “You okay? You sound far away.”
+
+“I'm in Zurich.”
+
+“Well,” Carol Henderson said comfortably, “that'll do it,” and hung up.
+
 ## You're Up Early
 
-The bed was very large, and there was someone else in it.
+When I came back into the bedroom I saw that the bed was very large, and that there was someone else in it.
 
 Gabriella was asleep on her side with one arm under the pillow, the way she had slept when we were first married, before the house in Bel Air, before the guest room, before we started arriving at things in separate cars. Her hair was longer. There was a callus on the side of her left index finger, which I knew without having to be told was from a string.
 

@@ -10,9 +10,9 @@ map:
   x: 1
   y: 8
 choices:
-- key: go_to_work
-  label: Go to work.
-  to: o_gaascore
+- key: breakfast
+  label: Go and find Gabriella.
+  to: o_breakfast
   sets: {}
   requires: {}
 variants: []
@@ -27,9 +27,9 @@ It rang eleven times. My father never hung up on a ringing phone; he waited unti
 
 I put it face down on the hall table, the way you would turn a photograph to the wall.
 
-I showered. I found that I knew where the towels were. I found that I knew which of the suits in the closet was for days when something was on the wire, a dark blue one with a lining the color of a bruise, and I put it on and it fit me perfectly, which is more than I can say for most of the suits I have paid to have fitted.
+I went back to the window and watched the lake for a while. A second steamer had joined the first. They passed each other in the middle, very slowly, without any acknowledgment, like two men who had been at school together and had not liked each other then either.
 
-When I turned the phone over, the message had transcribed itself onto the lock screen, under the number that said 912.
+When I turned the phone back over, the message had transcribed itself onto the lock screen, under the number that said 912.
 
 *Frank. Your Indonesian business is on the wire. Deal with it before the Americans wake up. Also is it raining th—*
 

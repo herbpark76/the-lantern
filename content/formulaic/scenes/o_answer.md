@@ -10,9 +10,9 @@ map:
   x: 0
   y: 8
 choices:
-- key: go_to_work
-  label: Go to work.
-  to: o_gaascore
+- key: breakfast
+  label: Go and find Gabriella.
+  to: o_breakfast
   sets: {}
   requires: {}
 variants: []

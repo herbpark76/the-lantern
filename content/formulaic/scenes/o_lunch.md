@@ -8,7 +8,7 @@ is_ending: false
 reads_flags: []
 map:
   x: 1
-  y: 11
+  y: 12
 choices:
 - key: go_with_her
   label: Go with her to the clinic.
@@ -31,6 +31,36 @@ choices:
 variants: []
 ---
 
+
+## History
+
+On the way to lunch I called Sunny.
+
+“I need you to pull something for me,” I said. “My own score. The whole history.”
+
+There was a short pause, the pause of a person deciding whether a request is a test. “Yours?”
+
+“Mine.”
+
+“Give me a minute.” Keys. “Okay. It's flat. It's been flat for six years. You're the flattest line in the building, Frank. Nine-twelve, nine-twelve, nine-twelve. We used to put it in the investor deck.” More keys. Then nothing.
+
+“Sunny?”
+
+“That's weird.”
+
+I stopped on the pavement. A woman with a pram went around me, saying something in Swiss German that I took to be a judgment.
+
+“There's a drop. One point. At nine-fourteen.” Sunny read it out carefully. “That's weird too. It's stamped in Pacific time. We don't stamp anything in Pacific time. Nine-fourteen a.m., Pacific. Nothing before that for six years, and then one point, and then it just keeps going. A point here, two there. No transactions behind any of it. The model just—” Sunny stopped. “It's like it's lost confidence in you. That's not a technical term. I'll find the technical term.”
+
+Nine-fourteen. I had looked at the clock on the dashboard on Grand Avenue, just before the loudspeaker. It had said 9:14, and I had been early for Ira by nearly five hours, or I had been early for nothing at all. I had not known, until Sunny said it, that I had remembered the time.
+
+“Frank? Do you want me to escalate it?”
+
+“No,” I said. “Just watch it for me.”
+
+“Watch it do what?”
+
+“I don't know,” I said. “Whatever it's going to do.”
 
 ## The Window
 

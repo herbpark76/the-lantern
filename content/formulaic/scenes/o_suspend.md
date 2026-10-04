@@ -8,7 +8,7 @@ is_ending: false
 reads_flags: []
 map:
   x: 1
-  y: 10
+  y: 11
 choices:
 - key: lunch
   label: Go to lunch.

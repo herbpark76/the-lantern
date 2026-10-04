@@ -10,7 +10,7 @@ reads_flags:
 - o_mia
 map:
   x: 1
-  y: 14
+  y: 15
 choices: []
 variants:
 - slot: pocket

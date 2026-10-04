@@ -8,7 +8,7 @@ is_ending: false
 reads_flags: []
 map:
   x: 0
-  y: 12
+  y: 13
 choices:
 - key: go_home
   label: Go home.

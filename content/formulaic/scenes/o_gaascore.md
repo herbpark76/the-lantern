@@ -8,7 +8,7 @@ is_ending: false
 reads_flags: []
 map:
   x: 1
-  y: 9
+  y: 10
 choices:
 - key: defend
   label: The model is the model. Stand behind the score.

@@ -10,7 +10,7 @@ reads_flags:
 - o_mia
 map:
   x: 1
-  y: 13
+  y: 14
 choices:
 - key: concert
   label: Go to the concert.
