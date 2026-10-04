@@ -300,6 +300,22 @@ export function NarrationPlayer({
         return;
       }
 
+      // Already-in-range fast-path: same file, audio already inside B's range.
+      // This happens when the rAF poll fires late and audio overshot past A.end.
+      // Don't pause, don't seek, don't call play() — just mark B and keep going.
+      if (next.mode === "manifest" && next.audioUrl === loadedUrlRef.current &&
+          !audio.paused && next.start !== undefined && next.end !== undefined &&
+          audio.currentTime >= next.start - 0.05 && audio.currentTime <= next.start + 1.5) {
+        audio.playbackRate = speedRef.current;
+        const hasNext = isNextContiguous(
+          curItems, idx, manifestRef.current, manifestBaseUrlRef.current,
+          next, loadedUrlRef.current,
+        );
+        scheduleSegmentStop(audio, next, idx, hasNext);
+        setIsPlaying(true);
+        return;
+      }
+
       // Not contiguous — reload file if needed
       const needsLoad = loadedUrlRef.current !== next.audioUrl || !audio.currentSrc;
       if (needsLoad && next.audioUrl) {
@@ -314,7 +330,10 @@ export function NarrationPlayer({
 
       audio.playbackRate = speedRef.current;
       audio.volume = originalVolumeRef.current;
-      if (next.start !== undefined) {
+      // Only seek if we're not already at or past the start position.
+      // Never seek backward within the same file during forward playback.
+      if (next.start !== undefined &&
+          (loadedUrlRef.current !== next.audioUrl || audio.currentTime < next.start - 0.05)) {
         audio.currentTime = next.start;
         await waitForSeeked(audio);
       }
