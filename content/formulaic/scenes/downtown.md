@@ -177,7 +177,41 @@ The G63 was at a quarter tank. I had not put gas in a car myself since 2009.
 
 “You're gonna need it. Just saying. Those guys have a lot of gas.”
 
-I pulled into a station on Vermont. I could not make the pump take my card. There was a small screen on the pump showing a weather forecast and then an advertisement for a weather app. I went inside.
+I pulled into a station on Vermont. The pump would not take my card, and it would not take the other card, and when I tried the black one, which is made of titanium and weighs about as much as a cookie, the little screen thanked me for my patience and showed me the weather. It occurred to me, later than it should have, that Harold Brenner did not need a board vote to call a bank.
+
+“There's a place,” {{name}} said, and pointed across Vermont. “They buy stuff.”
+
+## Pawn
+
+The sign said GOLD · LOANS · CASH 4 ANYTHING, and under it, in smaller letters someone had added later with a different brush, NO GUNS. A bell rang when I opened the door, an actual bell on a curl of spring steel, the kind I had assumed survived only in films about small towns.
+
+The man behind the glass was eating sunflower seeds and spitting the shells into a paper cup with great accuracy. He did not look at the television in the corner, which was showing my face, and I decided not to point it out.
+
+I took off my watch. My father gave it to me on my eighteenth birthday. It came by courier, because he was in Geneva, with a card that said *Congratulations*, signed by his secretary, who had beautiful handwriting. I had worn it every day for twenty-five years. I had never once thought of it as something that could be sold, the same way you do not think of your own hand as something that could be sold.
+
+He put a loupe in his eye and looked at it for a long time.
+
+“Papers?”
+
+“No.”
+
+“Nineteen hundred.”
+
+I heard myself say “Twenty-four” in the voice I use for acquisitions. He said “Nineteen” in the voice he used for everyone. He was right, and we both knew it, and I nodded.
+
+He counted nineteen hundred-dollar bills onto the glass, twice, licking his thumb, and slid them under the window with a yellow ticket. “Thirty days,” he said. “After that it's mine.”
+
+“That's fine.”
+
+I folded the bills around the ticket and put them in my breast pocket. I had not carried cash since boarding school. It felt like carrying a small, warm animal that might at any moment want something.
+
+{{name}} was leaning on the car when I came out. “Good?”
+
+“Nineteen hundred dollars.”
+
+He whistled. “That's a lot of gas.”
+
+## Pump Four
 
 The clerk was a woman in her sixties with reading glasses on a beaded chain. A small television behind her was showing my face. She did not look at it.
 
@@ -187,13 +221,13 @@ The clerk was a woman in her sixties with reading glasses on a beaded chain. A s
 
 “Bananas,” she said, and pointed. “No apples. Sorry, hon.”
 
-“That's fine.”
+I gave her one of the hundreds. She held it up to the light, which no one had ever done to me, and I stood there being checked, and found that I did not mind.
 
 “You want your receipt?”
 
 “No. Yes. Yes, please.”
 
-She tore it off and handed it to me. “Okay. Have a good one.”
+She tore it off and gave it to me with the change. “Okay. Have a good one.”
 
 I was in there for about two minutes. Nobody in that store knew who I was, or cared, and I have rarely in my life been happier. I still have the receipt. It is in my breast pocket with the other things.
 
@@ -349,38 +383,28 @@ I sat in the car with my hands on the wheel at ten and two, as I was taught at s
 
 I stepped out. I raised my hands.
 
-“Sir. Sir. Keep your hands up. Keep them where I can see them. Okay. Turn around. Turn and face away from me. Okay. Now walk backward toward my voice. Slowly. Keep coming. Keep coming. Okay. Stop. Stop there. Get down on your knees. Okay. Cross your ankles. Okay. Good.”
+“Sir. Sir. Keep your hands up. Keep them where I can see them. Okay. Turn around. Turn and face away from me. Okay. Now walk backward toward my voice. Slowly. Keep coming. Keep coming.”
 
-It was a woman's voice. She sounded like someone who had said those exact words many times and expected to say them many more. She was very good at it. I admired her for it, on my knees on Grand Avenue, with my ankles crossed.
+It was a woman's voice. She sounded like someone who had said those exact words many times and expected to say them many more. She was very good at it. I was walking backward up Grand Avenue with my hands in the air and two hundred cameras on me, and I admired her for it.
 
-My father would have approved of the whole thing. It was very composed.
+Then another voice said, quite close, *Check the cash, Frank.*
 
-Every camera in Los Angeles found my face, and for the first time in my life I had no idea how I looked.
+It was not the loudspeaker. It was nearer than that, and older. My father, Malcolm Gaas, counted his change at restaurants, at the table, in front of the waiter, every time, because a man who does not check is a man who will be taken. He said so whenever I looked embarrassed, which was every time.
 
-## Back Seat
+I would like it noted that I did not decide anything. I have done what that voice told me for forty-three years, and I did it then. I lowered my right hand to my breast pocket, to make sure.
 
-The back seat of a police car is molded plastic, so that it can be hosed out. I had not known that. There are no handles on the inside of the doors. There is a grille between you and the front, and a smell of disinfectant and old french fries.
+Somebody was shouting “Hold, hold, hold,” which seemed to me a good idea, and a little late.
 
-The officer who had told me to cross my ankles got in the front. Her name tag said ALVAREZ. I checked it twice. It stayed ALVAREZ.
+I did not hear the shot. I am told you do not hear the one that is for you.
 
-She read me my rights off a card. She did not perform them. She read them like terms and conditions, quickly, and asked if I understood, and I said yes, and she wrote something down.
+I was on my back on Grand Avenue, looking at a drone. It was looking at me. The bills had come out of my pocket and were moving off along the asphalt in the light wind, one at a time, unhurried, as if each of them had somewhere to be. The yellow ticket went with them. Thirty days.
 
-“You want some water?” she said. “It's gonna be a while. They're figuring out who gets you.”
-
-“Who gets me?”
-
-“Feds, us, I don't know. Above my pay grade.” She passed a small bottle back through a slot in the grille. “Don't drink it all at once.”
-
-Through the window I watched the crowd behind the tape. Phones up. A man with a dog. Two women in scrubs, on a break, eating something out of foil. And for a second, at the back, a bomber jacket and a grin. Then a news van pulled forward, and he was gone.
-
-I drank the water. All at once.
+At the far curb, the street sweeper turned the corner and continued its route. Nobody had told it.
 
 ## From Here
 
 I am telling you this from somewhere else now. I will not say where yet.
 
-I can see that morning from here, all of it at once: every version, every saucer, every door I closed gently so as not to interrupt. They all end on Grand Avenue with my ankles crossed. The choices didn't change where I ended up. They changed who arrived.
+I can see that morning from here, all of it at once: every version, every saucer, every door I closed gently so as not to interrupt. They all end on Grand Avenue with my hand at my pocket. The choices didn't change where I ended up. They changed who arrived. It was always me. It was not always the same man.
 
-I have been asked, since, by people whose job it is to ask, why I did not run. I had the houses and the cabin and the satellite phone. I tell them I don't know. That is true, but it is not the whole truth. The whole truth is that a young man ate a banana in my passenger seat and asked me what my meetings were about, and I could not answer him, and after that there did not seem to be anywhere to run to that was not another meeting.
-
-I still have the gas station receipt. Sixty dollars, pump four, 8:31 a.m. No apples.
+I still have the gas station receipt. I do not know how. Sixty dollars, pump four, 8:31 a.m. No apples.
