@@ -293,21 +293,23 @@ I drove on. He didn't ask me to stop.
 
 ## Questions
 
-“Are you real?” I said. I had never asked anyone that. It came out sounding like a deposition.
+“Who are you?” I said. I had been meaning to ask since Sunset. It came out sounding like a deposition.
 
 He laughed. “Wow. Okay. Good morning to you too.”
 
-“I'm serious. That woman on Sunset looked right through you.”
+“I'm serious. I don't know your last name. I don't know what you do.”
 
-“People look through people all the time. You do it like forty times a day.” He shrugged. “Ask Teodoro.”
+“I'm between things.” He shrugged. “Ask Teodoro. He's been between things for thirty years and he's the happiest guy you know.”
 
 I had not mentioned Teodoro.
 
 “How do you know about Teodoro?”
 
-“Man, you think about him constantly. The radio thing. You think about the radio thing more than you think about your company.”
+“You told me. Like an hour ago. The radio thing. You think about the radio thing more than you think about your company.”
 
-“Where did you come from?”
+I had not told him. I was fairly sure I had not told him. But I had also been fairly sure, at six that morning, that I had never been to Zurich.
+
+“Where are you from?”
 
 “Echo Park, mostly.” He considered it. “Before that, I don't know. Around. You know how it is.”
 
