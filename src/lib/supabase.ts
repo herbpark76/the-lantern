@@ -17,12 +17,20 @@ export type NarrationSettings = {
   manifest?: string;
 };
 
+export interface ChapterDef {
+  letter: string;
+  title: string;
+  start_scene?: string;
+  scenes?: string[];
+}
+
 export type StorySettings = {
   timelines: boolean;
   crowd_split: boolean;
   map: "fog" | "full" | "off";
   accent_color: string;
   narration?: NarrationSettings;
+  chapters?: ChapterDef[];
 };
 
 export type StoryStatus = "draft" | "published";
@@ -122,6 +130,10 @@ export interface Profile {
   reader_settings: ReaderSettings | null;
 }
 
+export function isStaff(profile: Profile | null): boolean {
+  return profile?.role === "author" || profile?.role === "admin";
+}
+
 export interface Playthrough {
   id: string;
   member_id: string;
@@ -132,6 +144,7 @@ export interface Playthrough {
   started_at: string;
   completed_at: string | null;
   ending_scene_key: string | null;
+  is_preview: boolean;
 }
 
 export interface PlaythroughStep {

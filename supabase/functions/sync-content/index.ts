@@ -20,18 +20,7 @@ interface StoryYaml {
   author_email: string;
   status: "draft" | "published";
   start_scene?: string;
-  settings: {
-    timelines: boolean;
-    crowd_split: boolean;
-    map: "fog" | "full" | "off";
-    accent_color: string;
-    narration?: {
-      voice_id: string;
-      voice_name: string;
-      model_id: string;
-      manifest?: string;
-    };
-  };
+  settings: Record<string, unknown>;
 }
 
 interface FlagDef {

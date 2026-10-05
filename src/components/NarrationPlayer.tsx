@@ -25,6 +25,8 @@ interface NarrationPlayerProps {
 }
 
 const SPEEDS = [0.9, 1, 1.1, 1.25, 1.5];
+const CONTIGUOUS_GAP = 0.6;
+const STOP_THRESHOLD = 0.03;
 
 function isNextContiguous(
   items: NarrationItem[],
@@ -44,7 +46,7 @@ function isNextContiguous(
     nextSeg.audioUrl === loadedUrl &&
     nextSeg.start !== undefined &&
     currentSeg.end !== undefined &&
-    Math.abs(nextSeg.start - currentSeg.end) < 0.15
+    Math.abs(nextSeg.start - currentSeg.end) <= CONTIGUOUS_GAP
   );
 }
 
@@ -77,7 +79,6 @@ export function NarrationPlayer({
   const waitingForTokenRef = useRef<string | null>(null);
 
   // Stop timers for precise segment ending
-  const stopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rafRef = useRef<number | null>(null);
   const fadeRafRef = useRef<number | null>(null);
   const originalVolumeRef = useRef(1);
@@ -89,9 +90,8 @@ export function NarrationPlayer({
   useEffect(() => { manifestBaseUrlRef.current = manifestBaseUrl; }, [manifestBaseUrl]);
   useEffect(() => { itemsTokenRef.current = itemsToken; }, [itemsToken]);
 
-  // Clear all stop timers (timeout, rAF, fade rAF)
+  // Clear all stop timers (rAF, fade rAF)
   const clearStopTimers = useCallback(() => {
-    if (stopTimeoutRef.current) { clearTimeout(stopTimeoutRef.current); stopTimeoutRef.current = null; }
     if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
     if (fadeRafRef.current) { cancelAnimationFrame(fadeRafRef.current); fadeRafRef.current = null; }
   }, []);
@@ -128,33 +128,50 @@ export function NarrationPlayer({
 
   const playItemRef = useRef<(idx: number) => Promise<void>>(async () => {});
 
-  // Schedule precise stop for a manifest segment
+  // Schedule precise stop for a manifest segment using rAF.
+  // For contiguous segments: when currentTime >= end, advance WITHOUT pausing.
+  // For non-contiguous segments: pause at end - STOP_THRESHOLD with a short fade.
   const scheduleSegmentStop = useCallback((
     audio: HTMLAudioElement,
     seg: NarrationPlayback,
     idx: number,
-    willFade: boolean,
+    isContiguous: boolean,
   ) => {
     clearStopTimers();
     if (seg.end === undefined) return;
 
-    const rate = audio.playbackRate || 1;
-    const remaining = (seg.end - audio.currentTime) / rate;
-    const targetTime = seg.end - 0.04;
+    const targetTime = isContiguous ? seg.end : seg.end - STOP_THRESHOLD;
 
-    // Schedule rAF polling ~80ms before segment end
-    const rafDelay = Math.max(0, (remaining - 0.08) * 1000);
+    // rAF loop: check currentTime every frame
+    const poll = () => {
+      if (audio.paused) {
+        rafRef.current = null;
+        return;
+      }
 
-    stopTimeoutRef.current = setTimeout(() => {
-      // rAF loop: pause when we reach targetTime
-      const poll = () => {
-        if (audio.paused) {
+      if (audio.currentTime >= targetTime) {
+        if (isContiguous) {
+          // Don't pause — just advance to next item
           rafRef.current = null;
+          if (!advancingRef.current) {
+            advancingRef.current = true;
+            const nextIdx = idx + 1;
+            if (nextIdx >= itemsRef.current.length) {
+              setIsPlaying(false);
+              setCurrentPlayback(null);
+              segRef.current = null;
+              advancingRef.current = false;
+              return;
+            }
+            currentIndexRef.current = nextIdx;
+            setCurrentIndex(nextIdx);
+            advancingRef.current = false;
+            void playItemRef.current(nextIdx);
+          }
           return;
-        }
-        if (audio.currentTime >= targetTime) {
+        } else {
+          // Non-contiguous: pause precisely, do NOT seek
           audio.pause();
-          audio.currentTime = seg.end!;
           audio.volume = originalVolumeRef.current;
           rafRef.current = null;
 
@@ -176,37 +193,36 @@ export function NarrationPlayer({
           }
           return;
         }
-        rafRef.current = requestAnimationFrame(poll);
-      };
-      rafRef.current = requestAnimationFrame(poll);
-    }, rafDelay);
+      }
 
-    // Volume fade over last 60ms for non-contiguous segments
-    if (willFade) {
-      const fadeDelay = Math.max(0, (remaining - 0.06) * 1000);
-      setTimeout(() => {
-        if (audio.paused || rafRef.current === null) return; // segment already ended
-        const startTime = performance.now();
-        const startVol = audio.volume;
-        const fadeDuration = 60;
-        const animateFade = () => {
-          if (audio.paused) {
-            audio.volume = originalVolumeRef.current;
-            fadeRafRef.current = null;
-            return;
-          }
-          const elapsed = performance.now() - startTime;
-          const progress = Math.min(1, elapsed / fadeDuration);
-          audio.volume = startVol * (1 - progress);
-          if (progress < 1) {
-            fadeRafRef.current = requestAnimationFrame(animateFade);
-          } else {
-            fadeRafRef.current = null;
-          }
-        };
-        fadeRafRef.current = requestAnimationFrame(animateFade);
-      }, fadeDelay);
-    }
+      // Volume fade for non-contiguous: last 60ms before targetTime
+      if (!isContiguous && seg.end !== undefined) {
+        const remaining = (seg.end - audio.currentTime) / (audio.playbackRate || 1);
+        if (remaining <= 0.06 && remaining > 0 && fadeRafRef.current === null) {
+          const startTime = performance.now();
+          const startVol = audio.volume;
+          const animateFade = () => {
+            if (audio.paused) {
+              audio.volume = originalVolumeRef.current;
+              fadeRafRef.current = null;
+              return;
+            }
+            const elapsed = performance.now() - startTime;
+            const progress = Math.min(1, elapsed / 60);
+            audio.volume = startVol * (1 - progress);
+            if (progress < 1) {
+              fadeRafRef.current = requestAnimationFrame(animateFade);
+            } else {
+              fadeRafRef.current = null;
+            }
+          };
+          fadeRafRef.current = requestAnimationFrame(animateFade);
+        }
+      }
+
+      rafRef.current = requestAnimationFrame(poll);
+    };
+    rafRef.current = requestAnimationFrame(poll);
   }, [clearStopTimers]);
 
   const goToNext = useCallback(() => {
@@ -252,6 +268,7 @@ export function NarrationPlayer({
 
       const prev = segRef.current;
 
+      // Check if previous segment was contiguous with this one
       const prevWasContiguousManifest =
         prev && prev.mode === "manifest" && prev.audioUrl === next.audioUrl &&
         loadedUrlRef.current === next.audioUrl;
@@ -266,19 +283,35 @@ export function NarrationPlayer({
       const audio = audioRef.current;
       if (!audio) return;
 
-      // Contiguous fast-path
+      // Contiguous fast-path: same file, gap <= 0.6s, still playing
       if (prevWasContiguousManifest && !audio.paused &&
           prev && prev.end !== undefined && next.start !== undefined &&
-          Math.abs(next.start - prev.end) < 0.15) {
+          Math.abs(next.start - prev.end) <= CONTIGUOUS_GAP) {
         audio.playbackRate = speedRef.current;
-        // Schedule stop for this contiguous segment
+        // Don't pause or seek — just schedule the stop
         const hasNext = isNextContiguous(
           curItems, idx, manifestRef.current, manifestBaseUrlRef.current,
           next, loadedUrlRef.current,
         );
         if (next.end !== undefined) {
-          scheduleSegmentStop(audio, next, idx, !hasNext);
+          scheduleSegmentStop(audio, next, idx, hasNext);
         }
+        setIsPlaying(true);
+        return;
+      }
+
+      // Already-in-range fast-path: same file, audio already inside B's range.
+      // This happens when the rAF poll fires late and audio overshot past A.end.
+      // Don't pause, don't seek, don't call play() — just mark B and keep going.
+      if (next.mode === "manifest" && next.audioUrl === loadedUrlRef.current &&
+          !audio.paused && next.start !== undefined && next.end !== undefined &&
+          audio.currentTime >= next.start - 0.05 && audio.currentTime <= next.start + 1.5) {
+        audio.playbackRate = speedRef.current;
+        const hasNext = isNextContiguous(
+          curItems, idx, manifestRef.current, manifestBaseUrlRef.current,
+          next, loadedUrlRef.current,
+        );
+        scheduleSegmentStop(audio, next, idx, hasNext);
         setIsPlaying(true);
         return;
       }
@@ -297,10 +330,16 @@ export function NarrationPlayer({
 
       audio.playbackRate = speedRef.current;
       audio.volume = originalVolumeRef.current;
-      if (next.start !== undefined) {
+      // Only seek if we're not already at or past the start position.
+      // Never seek backward within the same file during forward playback.
+      if (next.start !== undefined &&
+          (loadedUrlRef.current !== next.audioUrl || audio.currentTime < next.start - 0.05)) {
         audio.currentTime = next.start;
         await waitForSeeked(audio);
       }
+
+      // Guard again after async seek
+      if (itemsTokenRef.current !== sceneTokenRef.current) return;
 
       try {
         await audio.play();
@@ -325,7 +364,7 @@ export function NarrationPlayer({
           curItems, idx, manifestRef.current, manifestBaseUrlRef.current,
           next, loadedUrlRef.current,
         );
-        scheduleSegmentStop(audio, next, idx, !hasNext);
+        scheduleSegmentStop(audio, next, idx, hasNext);
       }
       return;
     }
@@ -394,7 +433,7 @@ export function NarrationPlayer({
   // Keep playItemRef in sync
   useEffect(() => { playItemRef.current = playItem; }, [playItem]);
 
-  // Audio 'ended' handler for API/non-manifest sources
+  // Audio 'ended' handler for API/non-manifest sources — registered ONCE
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -491,7 +530,7 @@ export function NarrationPlayer({
         manifestRef.current, manifestBaseUrlRef.current,
         seg, loadedUrlRef.current,
       );
-      scheduleSegmentStop(audio, seg, currentIndexRef.current, !hasNext);
+      scheduleSegmentStop(audio, seg, currentIndexRef.current, hasNext);
     }
   }, [speed, usingBrowserTTS, scheduleSegmentStop]);
 
@@ -521,7 +560,7 @@ export function NarrationPlayer({
               manifestRef.current, manifestBaseUrlRef.current,
               seg, loadedUrlRef.current,
             );
-            scheduleSegmentStop(audio, seg, currentIndexRef.current, !hasNext);
+            scheduleSegmentStop(audio, seg, currentIndexRef.current, hasNext);
           }
         }
         setIsPlaying(true);

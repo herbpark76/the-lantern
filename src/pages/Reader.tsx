@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { supabase, type Playthrough, type Scene, type Chapter, type Variant, type Choice, type ChoiceTally, type StorySettings } from "@/lib/supabase";
+import { supabase, type Playthrough, type Scene, type Chapter, type Variant, type Choice, type ChoiceTally, type StorySettings, type Flag, type ChapterDef, isStaff } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
 import { useRouter } from "@/lib/router";
 import {
@@ -7,11 +7,13 @@ import {
 } from "@/lib/content";
 import { StoryMap } from "@/components/StoryMap";
 import { NarrationPlayer } from "@/components/NarrationPlayer";
+import { ChapterBar } from "@/components/ChapterBar";
+import { JumpModal } from "@/components/JumpModal";
 import {
   extractNarrationItems, fetchManifest, stopBrowserSpeech,
   type NarrationItem, type NarrationManifest,
 } from "@/lib/narration";
-import { ArrowLeft, ChevronRight, Users, CheckCircle, Loader2, Home, BookOpen, Headphones, Map as MapIcon } from "lucide-react";
+import { ArrowLeft, ChevronRight, Users, CheckCircle, Loader2, Home, BookOpen, Headphones, Map as MapIcon, Eye, X } from "lucide-react";
 import { ReadingSettingsPopover, useReaderSettings } from "@/components/ReadingSettings";
 
 interface ReaderProps {
@@ -21,6 +23,12 @@ interface ReaderProps {
 
 const LISTEN_KEY = "narration:listen";
 const SPEED_KEY = "narration:speed";
+
+interface JumpTarget {
+  sceneKey: string;
+  mode: "reader" | "staff" | "staff_menu";
+  chapter: ChapterDef | null;
+}
 
 export function ReaderPage({ slug, playthroughId }: ReaderProps) {
   const { profile, session } = useAuth();
@@ -38,6 +46,9 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
   const [crowdMsg, setCrowdMsg] = useState<string | null>(null);
   const [chapterOffset, setChapterOffset] = useState(0);
   const [storySettings, setStorySettings] = useState<StorySettings | null>(null);
+  const [allFlags, setAllFlags] = useState<Flag[]>([]);
+  const [allVariants, setAllVariants] = useState<Variant[]>([]);
+  const [allChaptersData, setAllChaptersData] = useState<Chapter[]>([]);
   const crowdTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [renderedChapters, setRenderedChapters] = useState<Array<{ number: number; title: string; html: string }>>([]);
   const { settings: readerSettings, updateSize, updateSpacing, updateWidth } = useReaderSettings(profile);
@@ -56,6 +67,10 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
   // Token that uniquely identifies the items list — changes when items are rebuilt
   const [itemsToken, setItemsToken] = useState("");
 
+  // Jump modal state
+  const [jumpTarget, setJumpTarget] = useState<JumpTarget | null>(null);
+  const [jumping, setJumping] = useState(false);
+
   // Map sidebar open/closed — persisted per playthrough
   const mapOpenKey = `storymap:open:${playthroughId}`;
   const [mapOpen, setMapOpen] = useState(() => {
@@ -71,6 +86,8 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
 
   const narrationConfigured = !!storySettings?.narration;
   const manifestUrl = storySettings?.narration?.manifest ?? null;
+  const staff = isStaff(profile);
+  const storyChapters = storySettings?.chapters ?? [];
 
   const loadData = useCallback(async () => {
     const { data: pt } = await supabase
@@ -91,7 +108,7 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
     const settings = (storyData as { settings?: StorySettings })?.settings ?? null;
     setStorySettings(settings);
 
-    const [sceneRes, chaptersRes, variantsRes, choicesRes, scenesRes, stepsRes, talliesRes, allChaptersRes, allChoicesRes] = await Promise.all([
+    const [sceneRes, chaptersRes, variantsRes, choicesRes, scenesRes, stepsRes, talliesRes, allChaptersRes, allChoicesRes, flagsRes, variantsAllRes, allChaptersAllRes] = await Promise.all([
       supabase.from("scenes").select("*").eq("story_slug", slug).eq("key", ptData.current_scene_key).maybeSingle(),
       supabase.from("chapters").select("*").eq("story_slug", slug).eq("scene_key", ptData.current_scene_key).order("position"),
       supabase.from("variants").select("*").eq("story_slug", slug).eq("scene_key", ptData.current_scene_key),
@@ -101,6 +118,9 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
       supabase.from("choice_tallies").select("*").eq("story_slug", slug),
       supabase.from("chapters").select("*").eq("story_slug", slug).order("position"),
       supabase.from("choices").select("*").eq("story_slug", slug),
+      supabase.from("flags").select("*").eq("story_slug", slug),
+      supabase.from("variants").select("*").eq("story_slug", slug),
+      supabase.from("chapters").select("*").eq("story_slug", slug),
     ]);
 
     const currentScene = sceneRes.data as Scene | null;
@@ -111,6 +131,9 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
     setAllScenes((scenesRes.data as Scene[]) ?? []);
     setSteps((stepsRes.data as Array<{ id: string; scene_key: string; choice_key: string | null; timeline: number }>) ?? []);
     setTallies((talliesRes.data as ChoiceTally[]) ?? []);
+    setAllFlags((flagsRes.data as Flag[]) ?? []);
+    setAllVariants((variantsAllRes.data as Variant[]) ?? []);
+    setAllChaptersData((allChaptersAllRes.data as Chapter[]) ?? []);
 
     const allChapters = (allChaptersRes.data as Chapter[]) ?? [];
     const allChoicesAll = (allChoicesRes.data as Choice[]) ?? [];
@@ -165,6 +188,11 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
     fetchManifest(manifestUrl).then(setManifest);
   }, [manifestUrl]);
 
+  // Unique token for the current scene state — changes on scene/timeline/step count change
+  const sceneToken = playthrough
+    ? `${playthroughId}:${playthrough.current_scene_key}:${playthrough.timeline}:${steps.length}`
+    : "";
+
   // Render chapters when data changes
   useEffect(() => {
     if (!scene || !playthrough) return;
@@ -191,16 +219,11 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
       setNarrationWaiting(false);
     })();
     return () => { cancelled = true; };
-  }, [chapters, variants, playthrough, chapterOffset, scene]);
+  }, [chapters, variants, playthrough, chapterOffset, scene, sceneToken]);
 
   // Persist listen/speed
   useEffect(() => { localStorage.setItem(LISTEN_KEY, String(listenOn)); }, [listenOn]);
   useEffect(() => { localStorage.setItem(SPEED_KEY, String(narrationSpeed)); }, [narrationSpeed]);
-
-  // Unique token for the current scene state — changes on scene/timeline/step count change
-  const sceneToken = playthrough
-    ? `${playthroughId}:${playthrough.current_scene_key}:${playthrough.timeline}:${steps.length}`
-    : "";
 
   // Scroll highlighted item into view
   useEffect(() => {
@@ -214,6 +237,20 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
   const reachedScenes = new Set<string>();
   if (playthrough) reachedScenes.add(playthrough.current_scene_key);
   for (const step of steps) reachedScenes.add(step.scene_key);
+
+  // Compute clickable scene keys: staff can click all reached scenes + all written-chapter start scenes;
+  // readers can click only scenes in their playthrough's reached set (except current)
+  const clickableSceneKeys = new Set<string>();
+  if (staff) {
+    for (const s of allScenes) clickableSceneKeys.add(s.key);
+  } else {
+    for (const key of reachedScenes) clickableSceneKeys.add(key);
+  }
+
+  const stopAudioBeforeNav = useCallback(() => {
+    stopBrowserSpeech();
+    setNarrationWaiting(true);
+  }, []);
 
   const handleChoice = async (choice: Choice) => {
     if (!playthrough || !profile || choosing) return;
@@ -237,7 +274,7 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
       timeline: playthrough.timeline,
     });
 
-    if (storySettings?.crowd_split) {
+    if (storySettings?.crowd_split && !playthrough.is_preview) {
       const pct = getChoiceTallyPercent(
         tallies.map((t) => ({ scene_key: t.scene_key, choice_key: t.choice_key, total_count: t.total_count })),
         playthrough.current_scene_key,
@@ -286,6 +323,146 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
     setHighlightedIndex(itemIndex);
   };
 
+  // --- Chapter bar click handler ---
+  const handleChapterClick = (chapter: ChapterDef) => {
+    if (!chapter.start_scene) return;
+    stopAudioBeforeNav();
+
+    if (staff) {
+      const isReached = reachedScenes.has(chapter.start_scene);
+      setJumpTarget({
+        sceneKey: chapter.start_scene,
+        mode: isReached ? "staff_menu" : "staff",
+        chapter,
+      });
+    } else {
+      const stepIdx = steps.findIndex((s) => s.scene_key === chapter.start_scene);
+      if (stepIdx >= 0) {
+        setJumpTarget({ sceneKey: chapter.start_scene, mode: "reader", chapter });
+      }
+    }
+  };
+
+  // --- Map node click handler ---
+  const handleNodeClick = (sceneKey: string) => {
+    if (sceneKey === playthrough?.current_scene_key) return;
+    stopAudioBeforeNav();
+
+    const chapter = storyChapters.find(
+      (ch) => ch.scenes?.includes(sceneKey) || ch.start_scene === sceneKey
+    ) ?? null;
+
+    if (staff) {
+      const isReached = reachedScenes.has(sceneKey);
+      setJumpTarget({
+        sceneKey,
+        mode: isReached ? "staff_menu" : "staff",
+        chapter,
+      });
+    } else {
+      setJumpTarget({ sceneKey, mode: "reader", chapter });
+    }
+  };
+
+  // --- Jump confirmation handler ---
+  const handleJumpConfirm = async (opts: { flags: Record<string, unknown>; timeline: number; asPreview: boolean }) => {
+    if (!playthrough || !profile || !jumpTarget) return;
+    setJumping(true);
+
+    if (opts.asPreview) {
+      const { data: newPt } = await supabase
+        .from("playthroughs")
+        .insert({
+          member_id: profile.id,
+          story_slug: slug,
+          current_scene_key: jumpTarget.sceneKey,
+          timeline: opts.timeline,
+          flags: opts.flags,
+          is_preview: true,
+        })
+        .select()
+        .single();
+
+      setJumping(false);
+      setJumpTarget(null);
+      if (newPt) {
+        navigate(`/read/${slug}/${(newPt as Playthrough).id}`);
+      }
+    } else {
+      // Reader re-read: copy steps up to and including the step that entered the target scene
+      const targetStepIdx = steps.findIndex((s) => s.scene_key === jumpTarget.sceneKey);
+
+      // Rebuild flags by replaying steps' sets from the start
+      let rebuiltFlags: Record<string, unknown> = {};
+      let rebuiltTimeline = 1;
+      const stepsToCopy: Array<{ step_no: number; scene_key: string; choice_key: string | null; timeline: number }> = [];
+
+      const choicesByKey = new Map<string, Choice>();
+      for (const c of allChoices) {
+        choicesByKey.set(`${c.scene_key}:${c.key}`, c);
+      }
+
+      // Copy steps up to (but not including) the target scene — those are the steps that LED to it
+      // The target scene is where the new playthrough starts, so we copy all steps that came before it
+      for (let i = 0; i < targetStepIdx; i++) {
+        const step = steps[i];
+        stepsToCopy.push({
+          step_no: i,
+          scene_key: step.scene_key,
+          choice_key: step.choice_key,
+          timeline: step.timeline,
+        });
+        if (step.choice_key) {
+          const choice = choicesByKey.get(`${step.scene_key}:${step.choice_key}`);
+          if (choice) {
+            const { flags: newFlags, incrementTimeline } = applySets(
+              choice.sets, rebuiltFlags, storySettings?.timelines ?? false
+            );
+            rebuiltFlags = newFlags;
+            if (incrementTimeline) rebuiltTimeline += 1;
+          }
+        }
+      }
+
+      const { data: newPt } = await supabase
+        .from("playthroughs")
+        .insert({
+          member_id: profile.id,
+          story_slug: slug,
+          current_scene_key: jumpTarget.sceneKey,
+          timeline: rebuiltTimeline,
+          flags: rebuiltFlags,
+        })
+        .select()
+        .single();
+
+      if (newPt && stepsToCopy.length > 0) {
+        const newPtId = (newPt as Playthrough).id;
+        await supabase.from("playthrough_steps").insert(
+          stepsToCopy.map((s) => ({
+            playthrough_id: newPtId,
+            step_no: s.step_no,
+            scene_key: s.scene_key,
+            choice_key: s.choice_key,
+            timeline: s.timeline,
+          }))
+        );
+      }
+
+      setJumping(false);
+      setJumpTarget(null);
+      if (newPt) {
+        navigate(`/read/${slug}/${(newPt as Playthrough).id}`);
+      }
+    }
+  };
+
+  // --- Exit preview ---
+  const handleExitPreview = () => {
+    stopBrowserSpeech();
+    navigate(`/story/${slug}`);
+  };
+
   let narrationItemCounter = 0;
 
   if (loading) {
@@ -312,11 +489,100 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
   const accent = storySettings?.accent_color ?? "#c97b3a";
   const authToken = session?.access_token ?? import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+  const jumpTargetScene = jumpTarget ? allScenes.find((s) => s.key === jumpTarget.sceneKey) ?? null : null;
+
+  // Compute comprehensive flag list for the preview panel.
+  // Includes: reads_flags from the target scene + later scenes in the same chapter,
+  //           flags referenced in variant `when` conditions and chapter `when` conditions,
+  //           minus flags SET by choices inside the chapter before they're read.
+  const jumpFlags = (() => {
+    if (!jumpTarget || !jumpTarget.chapter) return [];
+
+    const chapterScenes = jumpTarget.chapter.scenes ?? (jumpTarget.chapter.start_scene ? [jumpTarget.chapter.start_scene] : []);
+    const sceneIdx = chapterScenes.indexOf(jumpTarget.sceneKey);
+    if (sceneIdx < 0) return [];
+
+    // Scenes from the target onward in the chapter
+    const relevantSceneKeys = chapterScenes.slice(sceneIdx);
+
+    // Collect all flags READ by these scenes
+    const readFlagSet = new Set<string>();
+    for (const sk of relevantSceneKeys) {
+      const scn = allScenes.find((s) => s.key === sk);
+      if (scn) for (const rf of scn.reads_flags) readFlagSet.add(rf);
+    }
+
+    // Collect flags referenced in variant `when` conditions for these scenes
+    for (const v of allVariants) {
+      if (!relevantSceneKeys.includes(v.scene_key)) continue;
+      for (const key of Object.keys(v.when)) {
+        if (key === "timeline" || key === "timeline_gte") continue;
+        readFlagSet.add(key);
+      }
+    }
+
+    // Collect flags referenced in chapter `when` conditions for these scenes
+    for (const ch of allChaptersData) {
+      if (!relevantSceneKeys.includes(ch.scene_key)) continue;
+      for (const key of Object.keys(ch.when ?? {})) {
+        if (key === "timeline" || key === "timeline_gte") continue;
+        readFlagSet.add(key);
+      }
+    }
+
+    // Exclude flags SET by choices inside the chapter before they're read.
+    // Walk scenes in order; track which flags are SET; a flag is excluded if
+    // it's SET in a scene that comes before the first scene that READS it.
+    const flagsSetBeforeRead = new Set<string>();
+    const flagsReadInChapter = new Set<string>();
+    for (let i = sceneIdx; i < chapterScenes.length; i++) {
+      const sk = chapterScenes[i];
+      const scn = allScenes.find((s) => s.key === sk);
+      if (scn) {
+        for (const rf of scn.reads_flags) {
+          flagsReadInChapter.add(rf);
+        }
+      }
+      // Check choices in this scene for flags they SET
+      const sceneChoices = allChoices.filter((c) => c.scene_key === sk);
+      for (const choice of sceneChoices) {
+        for (const key of Object.keys(choice.sets)) {
+          if (key === "_new_timeline") continue;
+          // If this flag hasn't been read yet by any scene up to this point, it's set before read
+          if (!flagsReadInChapter.has(key)) {
+            flagsSetBeforeRead.add(key);
+          }
+        }
+      }
+    }
+
+    // Final flag set: read flags minus set-before-read
+    const finalFlagSet = new Set<string>();
+    for (const f of readFlagSet) {
+      if (!flagsSetBeforeRead.has(f)) finalFlagSet.add(f);
+    }
+
+    return allFlags.filter((f) => finalFlagSet.has(f.key));
+  })();
+
   return (
     <div className="min-h-[calc(100vh-3.5rem)]">
+      {/* Preview banner */}
+      {playthrough.is_preview && (
+        <div className="bg-amber-100 dark:bg-amber-900/40 border-b border-amber-200 dark:border-amber-800 px-4 py-2 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm font-sans text-amber-800 dark:text-amber-300">
+            <Eye size={14} />
+            Preview — not counted
+          </div>
+          <button onClick={handleExitPreview} className="btn-ghost !px-2 !py-1 !text-xs text-amber-700 dark:text-amber-400">
+            <X size={12} /> Exit preview
+          </button>
+        </div>
+      )}
+
       <div className={`${readerSettings.width === "wide" ? "max-w-3xl" : readerSettings.width === "narrow" ? "max-w-lg" : "max-w-2xl"} mx-auto px-4 sm:px-6 py-8 ${listenOn ? "pb-24" : ""}`}>
         {/* Top bar */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <button onClick={() => navigate(`/story/${slug}`)} className="btn-ghost !px-2">
               <ArrowLeft size={16} />
@@ -354,10 +620,22 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
           )}
         </div>
 
-        {/* Scene title */}
+        {/* Scene title with chapter bar */}
         <div className="mb-8" style={{ borderTopWidth: "2px", borderTopColor: accent }}>
+          {storyChapters.length > 0 && (
+            <div className="mt-3">
+              <ChapterBar
+                chapters={storyChapters}
+                currentSceneKey={playthrough.current_scene_key}
+                reachedScenes={reachedScenes}
+                isStaff={staff}
+                accentColor={accent}
+                onChapterClick={handleChapterClick}
+              />
+            </div>
+          )}
           {scene.slug && (
-            <p className="text-xs font-sans uppercase tracking-widest text-ink-400 mt-3 mb-1">
+            <p className="text-xs font-sans uppercase tracking-widest text-ink-400 mt-2 mb-1">
               {scene.slug}
             </p>
           )}
@@ -373,8 +651,6 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
           }}
         >
           {renderedChapters.map((ch) => {
-            const chapterStartItem = narrationItemCounter;
-
             // Build HTML with data-narration-idx on each element
             let chapterHtml = "";
             if (ch.title) {
@@ -497,8 +773,22 @@ export function ReaderPage({ slug, playthroughId }: ReaderProps) {
           showTimelines={!!storySettings.timelines}
           isOpen={mapOpen}
           onToggle={toggleMap}
+          clickableSceneKeys={clickableSceneKeys}
+          onNodeClick={handleNodeClick}
         />
       )}
+
+      {/* Jump modal */}
+      <JumpModal
+        open={!!jumpTarget}
+        mode={jumpTarget?.mode ?? "reader"}
+        targetScene={jumpTargetScene}
+        targetChapter={jumpTarget?.chapter ?? null}
+        flags={jumpFlags}
+        accentColor={accent}
+        onConfirm={handleJumpConfirm}
+        onCancel={() => setJumpTarget(null)}
+      />
     </div>
   );
 }
