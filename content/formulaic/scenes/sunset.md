@@ -7,6 +7,7 @@ is_bottleneck: true
 is_ending: false
 reads_flags:
 - lawyer_choice
+- called_911
 map:
   x: 1
   y: 4
@@ -35,6 +36,11 @@ variants:
   when:
     lawyer_choice: later
   text: I told Ira I would call him back. I have said that to perhaps a thousand people. I have called back perhaps nine. Ira knew this. He said, “Two o'clock, Frank,” and hung up first, which nobody does to me.
+  priority: 10
+- slot: alone
+  when:
+    called_911: true
+  text: I had told a stranger I would turn myself in, which is the first promise I had made in years without a lawyer in the room. A Hundred West First Street. I took Sunset because it goes downtown if you let it, and because I wanted, for once, to arrive somewhere under my own power, even if the somewhere was a police station.
   priority: 10
 ---
 

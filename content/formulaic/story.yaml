@@ -13,3 +13,26 @@ settings:
     voice_name: Matthew
     model_id: eleven_v4
     manifest: /audio/formulaic/manifest.json
+  chapters:
+  - letter: F
+    title: Frank's Story
+    start_scene: open
+    scenes: [open, gabriella, suburban, office, garage, lawyer, dispatch, sunset, kickout, listen, downtown]
+  - letter: O
+    title: The Order of Things
+    start_scene: o_wake
+    scenes: [o_wake, o_answer, o_ring, o_text, o_breakfast, o_gaascore, o_defend, o_suspend, o_hal, o_lunch, o_clinic, o_card, o_home, o_tonhalle]
+  - letter: R
+    title: Return and Regret
+  - letter: M
+    title: Mia's Story
+  - letter: U
+    title: Under the Fold
+  - letter: L
+    title: Latitude and Longitude
+  - letter: A
+    title: Abe's Story
+  - letter: I
+    title: Identifying Idols
+  - letter: C
+    title: Conclusion and Creation

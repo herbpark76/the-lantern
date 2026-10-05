@@ -1,7 +1,7 @@
 ---
 key: dispatch
 title: '911'
-slug: A loop
+slug: Stone Canyon · 7:44 a.m.
 act: 2
 is_bottleneck: false
 is_ending: false
@@ -10,16 +10,11 @@ map:
   x: 2
   y: 3
 choices:
-- key: start_again
-  label: Start the morning again.
-  to: open
+- key: drive_downtown
+  label: Drive downtown.
+  to: sunset
   sets:
-    _new_timeline: true
-    route: none
-    gabriella_answer: none
-    card: none
-    office_choice: none
-    lawyer_choice: none
+    called_911: true
   requires: {}
 variants:
 - slot: cup_hour
@@ -126,3 +121,20 @@ There was a cup in the cupholder. I did not remember bringing a cup. It was sitt
 {{cup_hour}}
 
 *The coffee was wrong.*
+
+## First Street
+
+“Sir?” The dispatcher's voice was ordinary again, a little hoarse, a woman near the end of a night shift. “Sir, are you still with me?”
+
+“Yes.”
+
+“Okay. I've got a note on you here.” Typing. “What I need you to do is come in to the Police Administration Building. A hundred West First Street, downtown. Come by yourself. When you get there, stay in your vehicle with your hands where people can see them, and somebody will come out to you. Can you do that for me?”
+
+I looked at the cup in the cupholder. There was steam coming off it.
+
+“Yes,” I said.
+
+“Okay. Drive safe.” She paused, and something in her voice changed, as if she had put down the script for a second and picked up something of her own. “And sir? Get some breakfast first if you can. It's going to be a long day.”
+
+Then she was gone, and the radio in Portuguese went with her, and I sat by the reservoir with a cup of coffee I had not brought and did not drink, and after a while I turned the phone off and started the car.
+

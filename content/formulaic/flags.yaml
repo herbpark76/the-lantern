@@ -17,7 +17,7 @@
 - key: lawyer_choice
   type: choice
   allowed_values: ["plan", "later", "none"]
-  description: Whether Frank agreed to Ira's two o'clock surrender (resets each timeline).
+  description: Whether Frank agreed to Ira's two o'clock surrender.
 - key: seen_suburban
   type: boolean
   allowed_values: []
@@ -34,3 +34,7 @@
   type: choice
   allowed_values: ["went", "refused", "card", "none"]
   description: "Chapter O: Frank's answer to Mia's request at lunch."
+- key: called_911
+  type: boolean
+  allowed_values: []
+  description: Frank called 911 from Stone Canyon and agreed to drive downtown and turn himself in.
