@@ -19,7 +19,8 @@ const MAX_RECORD_MS = 5 * 60 * 1000;
 const MIN_RECORD_MS = 700;
 
 export function InterviewPage() {
-  const { session: authSession, loading: authLoading, signOut } = useAuth();
+  const { session: authSession, loading: authLoading } = useAuth();
+  const [stuck, setStuck] = useState(false);
 
   const [phase, setPhase] = useState<Phase>("loading");
   const [state, setState] = useState<InterviewState | null>(null);
@@ -59,12 +60,19 @@ export function InterviewPage() {
       .then((s) => { setState(s); setQuestion(s.question); setPhase("welcome"); })
       .catch((e: InterviewError) => {
         // Expired or invalid sign-in: sign out so the login form shows.
-        if (e.status === 401) { signOut(); return; }
+        if (e.status === 401) { resetSignIn(); return; }
         if (e.code === "no_subject") setNoSubject(true);
         else setError(e.message);
         setPhase("welcome");
       });
   }, [authLoading, authSession]);
+
+  // If loading takes too long, offer a way out instead of spinning forever.
+  useEffect(() => {
+    if (phase !== "loading" && !authLoading) { setStuck(false); return; }
+    const t = window.setTimeout(() => setStuck(true), 10000);
+    return () => window.clearTimeout(t);
+  }, [phase, authLoading]);
 
   // Force a light, warm page and keep iOS from bouncing.
   useEffect(() => {
@@ -144,7 +152,7 @@ export function InterviewPage() {
       setHerText(s.last_answer);
       playQuestion(s.question);
     } catch (e) {
-      if ((e as InterviewError).status === 401) { signOut(); return; }
+      if ((e as InterviewError).status === 401) { resetSignIn(); return; }
       showError(e);
       setPhase("welcome");
     }
@@ -314,6 +322,18 @@ export function InterviewPage() {
   // ── Render ──
   const honorific = state?.subject.honorific ?? "어머니";
 
+  if ((phase === "loading" || authLoading) && stuck) {
+    return (
+      <Shell>
+        <div className="flex-1 flex flex-col items-center justify-center text-center gap-6 px-2">
+          <p className="text-3xl font-semibold">잠깐 문제가 생겼어요</p>
+          <button onClick={() => window.location.reload()} className="w-full max-w-xs py-5 rounded-3xl bg-[#b0642e] text-white text-2xl font-semibold">다시 시도</button>
+          <SwitchAccount onClick={resetSignIn} label="다시 로그인하기" />
+        </div>
+      </Shell>
+    );
+  }
+
   if (phase === "loading" || authLoading) {
     return <Shell><div className="flex-1 flex items-center justify-center"><Loader2 size={40} className="animate-spin text-[#b0642e]" /></div></Shell>;
   }
@@ -326,7 +346,7 @@ export function InterviewPage() {
         <div className="flex-1 flex flex-col items-center justify-center text-center gap-4 px-2">
           <p className="text-3xl font-semibold">아직 준비 중이에요</p>
           <p className="text-xl text-[#5c5447]">아드님께 말씀해 주세요.</p>
-          <SwitchAccount onClick={() => { setNoSubject(false); signOut(); }} />
+          <SwitchAccount onClick={resetSignIn} />
         </div>
       </Shell>
     );
@@ -353,7 +373,7 @@ export function InterviewPage() {
           <p className="text-lg text-[#7a7160] leading-relaxed">
             질문을 들으시고, 큰 동그라미 버튼을<br />눌러서 편하게 말씀하시면 돼요.
           </p>
-          <SwitchAccount onClick={() => signOut()} />
+          <SwitchAccount onClick={resetSignIn} />
         </div>
       </Shell>
     );
@@ -504,12 +524,23 @@ function Shell({ children }: { children: React.ReactNode }) {
   );
 }
 
-function SwitchAccount({ onClick }: { onClick: () => void }) {
+function SwitchAccount({ onClick, label = "다른 계정으로 들어가기" }: { onClick: () => void; label?: string }) {
   return (
     <button onClick={onClick} className="mt-6 text-base text-[#a89f8e] underline underline-offset-4">
-      다른 계정으로 들어가기
+      {label}
     </button>
   );
+}
+
+// Clear the saved sign-in straight from storage and reload. This works even when the
+// stored session is broken (expired, revoked, or from an old version of the site).
+function resetSignIn() {
+  try {
+    Object.keys(localStorage)
+      .filter((k) => k.startsWith("sb-") && k.includes("auth-token"))
+      .forEach((k) => localStorage.removeItem(k));
+  } catch { /* storage unavailable */ }
+  window.location.reload();
 }
 
 function KoreanLogin() {
