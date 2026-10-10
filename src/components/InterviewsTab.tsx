@@ -176,7 +176,7 @@ function SubjectView({ subject, onChanged }: { subject: InterviewSubject; onChan
               <button key={s.id} onClick={() => setOpenSession(s.id)} className="card card-hover w-full text-left px-4 py-3 flex items-center gap-4">
                 <span className="font-serif text-xl text-ink-400 w-10">#{s.session_no}</span>
                 <span className="flex-1 min-w-0">
-                  <span className="block text-sm text-ink-900 dark:text-ink-100">{eraLabel(s.era)}</span>
+                  <span className="block text-sm text-ink-900 dark:text-ink-100">{sessionLabel(s)}</span>
                   <span className="block text-xs text-ink-500">
                     {new Date(s.started_at).toLocaleString()} · {minutes(s)} min · ${Number(s.est_cost_usd).toFixed(2)}
                   </span>
@@ -320,7 +320,9 @@ function SessionDetail({ session, subject, onBack, onChanged }: {
   const regenerate = async () => {
     setBusy("regen");
     setMsg(ghost
-      ? "Writing the story bible, outline and opening chapter — this can take two or three minutes…"
+      ? (session.kind === "revise"
+        ? "Updating the bible and revising the chapter — this can take two or three minutes…"
+        : "Updating the story bible and writing the chapter — this can take two or three minutes…")
       : "Writing the translation and summary — this can take a minute or two…");
     try {
       const r = await interviewApi.regenerate(session.id);
@@ -342,7 +344,7 @@ function SessionDetail({ session, subject, onBack, onChanged }: {
 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h3 className="font-serif text-xl text-ink-900 dark:text-ink-50">Session {session.session_no}: {eraLabel(session.era)}</h3>
+          <h3 className="font-serif text-xl text-ink-900 dark:text-ink-50">Session {session.session_no}: {sessionLabel(session)}</h3>
           <p className="text-xs text-ink-500 mt-1">
             {subject.display_name} · {new Date(session.started_at).toLocaleString()} · {minutes(session)} min ·
             {" "}{turns.filter((t) => t.speaker === "subject").length} answers · ${Number(session.est_cost_usd).toFixed(2)}
@@ -377,7 +379,7 @@ function SessionDetail({ session, subject, onBack, onChanged }: {
 
       {(session.summary_en || session.scene_notes || session.followups) && (
         <div className="grid lg:grid-cols-3 gap-4">
-          <NotesCard title={ghost ? "Story bible" : "Summary"} text={session.summary_en} />
+          <NotesCard title={session.kind === "revise" ? "Your notes" : ghost ? "Story bible" : "Summary"} text={session.summary_en} />
           <NotesCard title={ghost ? "Outline" : "Scene notes"} text={session.scene_notes} />
           <NotesCard title={ghost ? "Still to decide" : "Follow-ups"} text={session.followups} />
         </div>
@@ -467,6 +469,11 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 // Lowercase letters, numbers and hyphens only, so it works cleanly in links and file paths.
 function toSlug(v: string): string {
   return v.toLowerCase().replace(/[\s_]+/g, "-").replace(/[^a-z0-9-]/g, "").replace(/-{2,}/g, "-");
+}
+
+function sessionLabel(s: InterviewSession): string {
+  if (s.kind === "revise") return s.target_doc ? "Notes on a chapter" : "Notes on the story bible";
+  return s.era === "free" ? "Interview" : eraLabel(s.era);
 }
 
 function minutes(s: InterviewSession): number {

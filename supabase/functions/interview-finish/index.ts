@@ -4,7 +4,7 @@
 // and commits a markdown file to GitHub at interviews/<story_slug>/session-NN.md.
 
 import {
-  admin, callClaude, corsHeaders, ERAS, estimateCost, getCaller, GITHUB_REPO, GITHUB_TOKEN,
+  admin, bookChapters, callClaude, corsHeaders, currentBible, docBody, docTitle, ERAS, estimateCost, getCaller, GITHUB_REPO, GITHUB_TOKEN,
   isStaffUser, json, jsonError, SERVICE_ROLE_KEY, type Session, type Subject, type Turn,
 } from "../_shared/interview.ts";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.57.4";
@@ -66,7 +66,7 @@ async function commitToGitHub(path: string, content: string, message: string): P
 
 // ── Ghostwriter sessions: story bible + outline + opening chapter ─────────
 
-const GW_NOTES_SYSTEM = `You are a story developer. You receive the transcript of a voice interview in which an author described a story they want written (speech-to-text; small errors are normal), plus notes from earlier sessions. Build on everything known so far; where something was left open, make a clear, tasteful suggestion and mark it "(suggested)". Never contradict what the author said.
+const GW_NOTES_SYSTEM = `You are a story developer. You receive the current story bible (if any), notes from earlier sessions (including sessions where the author gave notes on the draft), and the transcript of a voice interview in which the author described the story they want written (speech-to-text; small errors are normal). Produce the complete, updated version of each section, keeping everything still true and folding in what's new. Build on everything known so far; where something was left open, make a clear, tasteful suggestion and mark it "(suggested)". Never contradict what the author said.
 
 Answer with exactly these three sections, each wrapped in its tag, in markdown (## subheadings, paragraphs and - bullets only; no tables):
 
@@ -80,42 +80,141 @@ A three-act outline: Act I, Act II (with the midpoint), Act III. Under each act,
 4–8 specific questions to settle in the next session, as - bullets.
 </open_questions>`;
 
-function chapterSystem(subject: Subject): string {
+function chapterSystem(subject: Subject, n: number): string {
   const lang = subject.language === "ko" ? "Korean" : "English";
-  return `You are a skilled novelist ghostwriting a book for ${subject.honorific || subject.display_name}. From the interview transcript and earlier notes, write the opening chapter of their story: about 2,500–3,500 words, in ${lang}, in the genre, tone and point of view they described. Let the craft of the authors they love inform yours (pacing, wit, texture), but never imitate or quote their text. Start in scene with a strong hook, establish the protagonist's voice and desire, and end the chapter on a turn that pulls the reader on. Where details were left open, choose well and stay consistent with everything they said.
+  const who = subject.honorific || subject.display_name;
+  const task = n === 1
+    ? "write the opening chapter of their story. Start in scene with a strong hook, establish the protagonist's voice and desire, and end the chapter on a turn that pulls the reader on."
+    : `write Chapter ${n} of their story. Pick up where the previous chapter (given below) left off, follow the outline's next beats, keep continuity of names, facts and voice, and end on a turn that pulls the reader on.`;
+  return `You are a skilled novelist ghostwriting a book for ${who}. From the interview transcript, the story bible and earlier notes, ${task} About 2,500–3,500 words, in ${lang}, in the genre, tone and point of view they described. Let the craft of the authors they love inform yours (pacing, wit, texture), but never imitate or quote their text. Where details were left open, choose well and stay consistent with everything they said.
 
-Output only the chapter in markdown: first line "# Chapter 1: <title>", then paragraphs. Use "### 1", "### 2" lines only for section breaks. No other headings, no notes.`;
+Output only the chapter in markdown: first line "# Chapter ${n}: <title>", then paragraphs. Use "### 1", "### 2" lines only for section breaks. No other headings, no notes.`;
 }
 
+const REVISE_NOTES_SYSTEM = `You are a story editor. You receive the current story bible, possibly the text of one chapter, and the transcript of a voice session in which the author gave notes (speech-to-text; small errors are normal). Fold the author's notes into the bible faithfully. Keep everything in the bible that the notes don't change; where the notes change something, the notes win. Never invent preferences the author didn't express; you may mark tasteful fills "(suggested)".
+
+Answer with exactly these four sections, each wrapped in its tag, in markdown (## subheadings, paragraphs and - bullets only; no tables):
+
+<revision_notes>
+The author's notes from this session as clear, actionable - bullets, grouped under "## For this chapter" (only if a chapter was discussed) and "## For the story overall".
+</revision_notes>
+<bible>
+The complete updated story bible: working title (and alternates), logline, genre and tone, comparable books/films, setting, protagonist (want, need, flaw, voice), key characters and the opposing force, central conflict and stakes, themes, the author's tastes and influences, and a short "## Author's standing notes" list of preferences that apply to all chapters.
+</bible>
+<outline>
+The complete updated three-act outline (Act I, Act II with midpoint, Act III) with numbered chapter beats.
+</outline>
+<open_questions>
+4–8 questions still to settle, as - bullets.
+</open_questions>`;
+
+function rewriteSystem(subject: Subject): string {
+  const lang = subject.language === "ko" ? "Korean" : "English";
+  return `You are the novelist revising a chapter you ghostwrote for ${subject.honorific || subject.display_name}. Below are the story bible, the current chapter, and the transcript of a session in which the author gave notes on it. Write the revised chapter in ${lang}: apply every note the author gave about this chapter, keep what they liked, keep continuity with the bible, and otherwise preserve the chapter's strengths. Similar length unless the notes ask otherwise.
+
+Output only the revised chapter in markdown with the same first-line heading format ("# Chapter N: <title>"; you may change the title if the notes call for it), then paragraphs. Use "### 1", "### 2" lines only for section breaks. No other headings, no notes.`;
+}
+
+function nn(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+function composeBible(bible: string, outline: string, open: string): string {
+  return `# Story Bible\n\n${bible}\n\n## Three-act outline\n\n${outline}\n\n## Still to decide\n\n${open}`;
+}
+
+function personFolder(subject: Subject): string {
+  return (subject.display_name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || subject.id.slice(0, 8);
+}
+
+function chapterHeading(md: string, n: number): string {
+  const t = md.trim();
+  return t.startsWith("# ") ? t : `# Chapter ${n}\n\n${t}`;
+}
+
+/** Save a doc's current text as a version before it is overwritten. */
+async function snapshot(db: SupabaseClient, docId: string, note: string): Promise<void> {
+  const { data } = await db.from("book_docs").select("title_en, title_ko, body_en, body_ko").eq("id", docId).maybeSingle();
+  const d = data as { title_en: string; title_ko: string; body_en: string; body_ko: string } | null;
+  if (!d || !(d.body_en || d.body_ko)) return;
+  const { error } = await db.from("book_doc_versions").insert({ doc_id: docId, ...d, note });
+  if (error) console.error("[interview-finish] version save failed", error.message);
+}
+
+function transcriptOf(subject: Subject, turns: Turn[], label: string): string {
+  const name = subject.display_name || subject.honorific;
+  return turns
+    .map((t) => t.speaker === "interviewer" ? `${label}: ${t.text}` : `${name}: ${t.skipped ? "(skipped)" : t.text}`)
+    .join("\n\n");
+}
+
+async function saveBible(db: SupabaseClient, subject: Subject, md: string, note: string): Promise<void> {
+  const id = `${subject.story_slug}/bible`;
+  await snapshot(db, id, note);
+  const lang = subject.language === "ko" ? "ko" : "en";
+  const { error } = await db.from("book_docs").upsert({
+    id, story_slug: subject.story_slug, kind: "summary", position: 0,
+    [`title_${lang}`]: "Story Bible", [`body_${lang}`]: md, [`voice_${lang}`]: subject.tts_voice_id,
+    model_id: subject.tts_model_id, speed: Number(subject.tts_speed) || 1, updated_at: new Date().toISOString(),
+  }, { onConflict: "id" });
+  if (error) console.error("[interview-finish] bible upsert failed", error.message);
+}
+
+async function saveChapter(db: SupabaseClient, subject: Subject, id: string, n: number, md: string, note: string): Promise<void> {
+  await snapshot(db, id, note);
+  const lang = subject.language === "ko" ? "ko" : "en";
+  const title = md.split("\n")[0].replace(/^#\s*/, "");
+  const { error } = await db.from("book_docs").upsert({
+    id, story_slug: subject.story_slug, kind: "sample", position: n,
+    [`title_${lang}`]: title, [`body_${lang}`]: md, [`voice_${lang}`]: subject.tts_voice_id,
+    model_id: subject.tts_model_id, speed: Number(subject.tts_speed) || 1, updated_at: new Date().toISOString(),
+  }, { onConflict: "id" });
+  if (error) console.error("[interview-finish] chapter upsert failed", error.message);
+}
+
+// Interview session: update the living bible and write the next chapter.
 async function finishGhostwriter(
   db: SupabaseClient, subject: Subject, session: Session, turns: Turn[], skipGithub: boolean,
 ): Promise<Response> {
-  const name = subject.display_name || subject.honorific;
-  const transcript = turns
-    .map((t) => t.speaker === "interviewer" ? `Ghostwriter: ${t.text}` : `${name}: ${t.skipped ? "(skipped)" : t.text}`)
-    .join("\n\n");
+  const lang = subject.language;
+  const transcript = transcriptOf(subject, turns, "Ghostwriter");
+  const chapters = await bookChapters(db, subject.story_slug);
+
+  // Which chapter this session writes: the one it wrote before (regenerate), else the next one.
+  let target = session.target_doc ? chapters.find((c) => c.id === session.target_doc) : undefined;
+  if (!target && session.session_no === 1) target = chapters.find((c) => c.id === `${subject.story_slug}/sample-01`);
+  const n = target?.position ?? ((chapters.reduce((m, c) => Math.max(m, c.position), 0)) + 1);
+  const chapterId = target?.id ?? `${subject.story_slug}/sample-${nn(n)}`;
+  const previous = [...chapters].filter((c) => c.position < n).sort((a, b) => b.position - a.position)[0];
 
   const { data: earlierRows } = await db
-    .from("interview_sessions").select("session_no, summary_en, scene_notes, followups")
+    .from("interview_sessions").select("session_no, kind, summary_en, followups")
     .eq("subject_id", subject.id).lt("session_no", session.session_no).order("session_no");
-  const earlier = ((earlierRows as Array<{ session_no: number; summary_en: string | null; scene_notes: string | null; followups: string | null }>) ?? [])
-    .map((s) => `Session ${s.session_no} story bible:\n${s.summary_en ?? ""}\n\nOutline:\n${s.scene_notes ?? ""}\n\nOpen questions then:\n${s.followups ?? ""}`)
+  const earlier = ((earlierRows as Array<{ session_no: number; kind: string; summary_en: string | null; followups: string | null }>) ?? [])
+    .map((s) => `Session ${s.session_no}${s.kind === "revise" ? " (author's notes)" : ""}:\n${s.summary_en ?? ""}`)
     .join("\n\n---\n\n") || "(none — this is the first session)";
-  const input = `Earlier sessions:\n${earlier}\n\nThis session (#${session.session_no}) transcript:\n\n${transcript}`;
+  const bible = await currentBible(db, subject.story_slug, lang);
+
+  const input = [
+    `Current story bible:\n${bible || "(none yet)"}`,
+    `Earlier sessions:\n${earlier}`,
+    `This session (#${session.session_no}) transcript:\n\n${transcript}`,
+  ].join("\n\n=====\n\n");
+  const chapterInput = previous ? `${input}\n\n=====\n\nPrevious chapter:\n\n${docBody(previous, lang)}` : input;
 
   const [notes, chapter] = await Promise.all([
     callClaude(GW_NOTES_SYSTEM, [{ role: "user", content: input }], 8000),
-    callClaude(chapterSystem(subject), [{ role: "user", content: input }], 12000),
+    callClaude(chapterSystem(subject, n), [{ role: "user", content: chapterInput }], 12000),
   ]);
   const parsed = parseSections(notes.text, ["bible", "outline", "open_questions"]);
-  let chapterMd = chapter.text.trim();
-  if (!chapterMd.startsWith("# ")) chapterMd = `# Chapter 1\n\n${chapterMd}`;
-  const chapterTitle = chapterMd.split("\n")[0].replace(/^#\s*/, "");
+  const chapterMd = chapterHeading(chapter.text, n);
+  const bibleMd = composeBible(parsed.bible ?? "", parsed.outline ?? "", parsed.open_questions ?? "");
+
+  await saveBible(db, subject, bibleMd, `Before session ${session.session_no}`);
+  await saveChapter(db, subject, chapterId, n, chapterMd, `Before session ${session.session_no} rewrite`);
 
   const input_tokens = session.input_tokens + notes.input_tokens + chapter.input_tokens;
   const output_tokens = session.output_tokens + notes.output_tokens + chapter.output_tokens;
-  const nn = String(session.session_no).padStart(2, "0");
-
   const update: Record<string, unknown> = {
     status: "finished",
     ended_at: session.ended_at ?? new Date().toISOString(),
@@ -124,39 +223,18 @@ async function finishGhostwriter(
     summary_en: parsed.bible ?? "",
     scene_notes: parsed.outline ?? "",
     followups: parsed.open_questions ?? "",
+    target_doc: chapterId,
     input_tokens,
     output_tokens,
     est_cost_usd: estimateCost(input_tokens, output_tokens),
     github_error: null,
   };
 
-  // Put the results in Studio > Book (with narration) for this story.
-  const bibleMd = `# Story Bible, Session ${session.session_no}\n\n${update.summary_en}\n\n## Three-act outline\n\n${update.scene_notes}\n\n## Still to decide\n\n${update.followups}`;
-  const voiceCols = subject.language === "ko"
-    ? { voice_ko: subject.tts_voice_id }
-    : { voice_en: subject.tts_voice_id };
-  const bodyCol = subject.language === "ko" ? "body_ko" : "body_en";
-  const titleCol = subject.language === "ko" ? "title_ko" : "title_en";
-  const { error: docErr } = await db.from("book_docs").upsert([
-    {
-      id: `${subject.story_slug}/summary-${nn}`, story_slug: subject.story_slug, kind: "summary", position: session.session_no,
-      [titleCol]: `Story Bible, Session ${session.session_no}`, [bodyCol]: bibleMd, ...voiceCols,
-      model_id: subject.tts_model_id, speed: Number(subject.tts_speed) || 1, updated_at: new Date().toISOString(),
-    },
-    {
-      id: `${subject.story_slug}/sample-${nn}`, story_slug: subject.story_slug, kind: "sample", position: session.session_no,
-      [titleCol]: chapterTitle, [bodyCol]: chapterMd, ...voiceCols,
-      model_id: subject.tts_model_id, speed: Number(subject.tts_speed) || 1, updated_at: new Date().toISOString(),
-    },
-  ], { onConflict: "id" });
-  if (docErr) console.error("[interview-finish] book_docs upsert failed", docErr.message);
-
   if (!skipGithub) {
-    const person = (subject.display_name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || subject.id.slice(0, 8);
-    const path = `interviews/${subject.story_slug}/${person}/session-${nn}.md`;
+    const path = `interviews/${subject.story_slug}/${personFolder(subject)}/session-${nn(session.session_no)}.md`;
     const md = `${bibleMd}\n\n---\n\n${chapterMd}\n\n---\n\n## Transcript\n\n${transcript}\n`;
     try {
-      await commitToGitHub(path, md, `Ghostwriter session ${nn} (${subject.story_slug})`);
+      await commitToGitHub(path, md, `Ghostwriter session ${nn(session.session_no)} (${subject.story_slug})`);
       update.github_path = path;
     } catch (e) {
       update.github_error = String((e as Error).message ?? e);
@@ -164,7 +242,74 @@ async function finishGhostwriter(
   }
 
   await db.from("interview_sessions").update(update).eq("id", session.id);
-  return json({ ok: true, github_path: update.github_path ?? null, github_error: update.github_error ?? null, book: true });
+  return json({ ok: true, github_path: update.github_path ?? null, github_error: update.github_error ?? null, book: true, chapter: chapterId });
+}
+
+// Notes session: fold the author's notes into the bible and rewrite the chapter (old one kept).
+async function finishRevision(
+  db: SupabaseClient, subject: Subject, session: Session, turns: Turn[], skipGithub: boolean,
+): Promise<Response> {
+  const lang = subject.language;
+  const transcript = transcriptOf(subject, turns, "Editor");
+  const chapters = await bookChapters(db, subject.story_slug);
+  const target = session.target_doc ? chapters.find((c) => c.id === session.target_doc) : undefined;
+  const bible = await currentBible(db, subject.story_slug, lang);
+  const chapterText = target ? docBody(target, lang) : "";
+
+  const notesInput = [
+    `Current story bible:\n${bible || "(none yet)"}`,
+    target ? `Chapter discussed: ${docTitle(target, lang)}\n\n${chapterText}` : "No specific chapter: general notes on the story.",
+    `Notes session transcript:\n\n${transcript}`,
+  ].join("\n\n=====\n\n");
+  const rewriteInput = [
+    `Story bible:\n${bible || "(none yet)"}`,
+    `Current chapter:\n\n${chapterText}`,
+    `Notes session transcript:\n\n${transcript}`,
+  ].join("\n\n=====\n\n");
+
+  const [notes, rewrite] = await Promise.all([
+    callClaude(REVISE_NOTES_SYSTEM, [{ role: "user", content: notesInput }], 10000),
+    target ? callClaude(rewriteSystem(subject), [{ role: "user", content: rewriteInput }], 12000) : Promise.resolve(null),
+  ]);
+  const parsed = parseSections(notes.text, ["revision_notes", "bible", "outline", "open_questions"]);
+  const bibleMd = composeBible(parsed.bible ?? bible, parsed.outline ?? "", parsed.open_questions ?? "");
+
+  await saveBible(db, subject, bibleMd, `Before notes session ${session.session_no}`);
+  let chapterMd = "";
+  if (target && rewrite?.text.trim()) {
+    chapterMd = chapterHeading(rewrite.text, target.position);
+    await saveChapter(db, subject, target.id, target.position, chapterMd, `Before notes session ${session.session_no}`);
+  }
+
+  const input_tokens = session.input_tokens + notes.input_tokens + (rewrite?.input_tokens ?? 0);
+  const output_tokens = session.output_tokens + notes.output_tokens + (rewrite?.output_tokens ?? 0);
+  const update: Record<string, unknown> = {
+    status: "finished",
+    ended_at: session.ended_at ?? new Date().toISOString(),
+    transcript_ko: transcript,
+    transcript_en: transcript,
+    summary_en: parsed.revision_notes ?? "",
+    scene_notes: parsed.outline ?? "",
+    followups: parsed.open_questions ?? "",
+    input_tokens,
+    output_tokens,
+    est_cost_usd: estimateCost(input_tokens, output_tokens),
+    github_error: null,
+  };
+
+  if (!skipGithub) {
+    const path = `interviews/${subject.story_slug}/${personFolder(subject)}/session-${nn(session.session_no)}-notes.md`;
+    const md = `# Notes session ${nn(session.session_no)}${target ? `: ${docTitle(target, lang)}` : ""}\n\n${parsed.revision_notes ?? ""}\n\n---\n\n${bibleMd}${chapterMd ? `\n\n---\n\n${chapterMd}` : ""}\n\n---\n\n## Transcript\n\n${transcript}\n`;
+    try {
+      await commitToGitHub(path, md, `Notes session ${nn(session.session_no)} (${subject.story_slug})`);
+      update.github_path = path;
+    } catch (e) {
+      update.github_error = String((e as Error).message ?? e);
+    }
+  }
+
+  await db.from("interview_sessions").update(update).eq("id", session.id);
+  return json({ ok: true, github_path: update.github_path ?? null, github_error: update.github_error ?? null, book: true, chapter: target?.id ?? null });
 }
 
 Deno.serve(async (req: Request) => {
@@ -198,7 +343,9 @@ Deno.serve(async (req: Request) => {
     }
 
     if (subject.mode === "ghostwriter") {
-      return await finishGhostwriter(db, subject, session, turns, !!skip_github);
+      return session.kind === "revise"
+        ? await finishRevision(db, subject, session, turns, !!skip_github)
+        : await finishGhostwriter(db, subject, session, turns, !!skip_github);
     }
 
     const name = subject.display_name || subject.honorific;

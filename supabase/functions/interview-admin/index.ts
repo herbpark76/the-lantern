@@ -68,6 +68,42 @@ Deno.serve(async (req: Request) => {
       return json({ subject, account_created: created });
     }
 
+    // Publish a ghostwriter/memoir book to the public Library (a stories row with settings.kind = "book").
+    //   { action: "publish_book", story_slug, title, blurb, chapter_ids: string[] }
+    //   { action: "unpublish_book", story_slug }
+    if (body.action === "publish_book" || body.action === "unpublish_book") {
+      const slug = String(body.story_slug ?? "");
+      if (!slug) return jsonError(400, "story_slug is required");
+      const { data: existing } = await db.from("stories").select("slug, settings, status").eq("slug", slug).maybeSingle();
+      const ex = existing as { settings?: Record<string, unknown> } | null;
+      if (ex && ex.settings?.kind !== "book") return jsonError(409, "An interactive story already uses this slug");
+
+      if (body.action === "unpublish_book") {
+        if (ex) await db.from("stories").update({ status: "draft" }).eq("slug", slug);
+        return json({ ok: true, status: "draft" });
+      }
+
+      const raw = body as unknown as { title?: string; blurb?: string; chapter_ids?: unknown };
+      const title = String(raw.title ?? "").trim();
+      if (!title) return jsonError(400, "A title is required");
+      const ids = Array.isArray(raw.chapter_ids) ? raw.chapter_ids.map(String) : [];
+      if (!ids.length) return jsonError(400, "Pick at least one chapter to publish");
+
+      const { error: storyErr } = await db.from("stories").upsert({
+        slug, title, blurb: String(raw.blurb ?? "").trim(), author_id: user.id, status: "published",
+        settings: { ...(ex?.settings ?? {}), kind: "book" },
+      }, { onConflict: "slug" });
+      if (storyErr) throw new Error(storyErr.message);
+
+      const { data: docs } = await db.from("book_docs").select("id").eq("story_slug", slug).eq("kind", "sample");
+      const all = ((docs as Array<{ id: string }>) ?? []).map((d) => d.id);
+      const on = all.filter((id) => ids.includes(id));
+      const off = all.filter((id) => !ids.includes(id));
+      if (on.length) await db.from("book_docs").update({ published: true }).in("id", on);
+      if (off.length) await db.from("book_docs").update({ published: false }).in("id", off);
+      return json({ ok: true, status: "published", published: on });
+    }
+
     if (body.action === "set_password") {
       const { data: subject } = await db.from("interview_subjects").select("user_id").eq("id", body.subject_id).maybeSingle();
       if (!subject) return jsonError(404, "Subject not found");

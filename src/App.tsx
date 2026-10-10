@@ -10,6 +10,7 @@ import { ReaderPage } from "@/pages/Reader";
 import { ShelfPage } from "@/pages/Shelf";
 import { StudioPage } from "@/pages/Studio";
 import { InterviewPage } from "@/pages/Interview";
+import { BookReaderPage } from "@/pages/BookReader";
 
 // "/interview/last%20exit" → "last exit"
 function decodeSegment(seg: string | undefined): string | undefined {
@@ -36,6 +37,8 @@ function Routes() {
     page = <ShelfPage />;
   } else if (segments[0] === "studio") {
     page = <StudioPage />;
+  } else if (segments[0] === "book" && segments[1]) {
+    page = <BookReaderPage slug={decodeSegment(segments[1])!} />;
   } else if (segments[0] === "story" && segments[1]) {
     page = <StoryDetailPage slug={segments[1]} />;
   } else if (segments[0] === "read" && segments[1] && segments[2]) {

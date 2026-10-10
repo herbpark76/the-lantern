@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, FileText, Headphones, Loader2, Mic, Pause, Play, RefreshCw, SkipBack, SkipForward } from "lucide-react";
+import {
+  BookOpen, ChevronLeft, ChevronRight, FileText, Globe, Headphones, History, Loader2, MessageSquare, Mic, Pause, Play,
+  RefreshCw, SkipBack, SkipForward,
+} from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { InterviewError } from "@/lib/interview";
+import { InterviewError, interviewApi } from "@/lib/interview";
 
 // Studio > Book: read a book's sample chapters and session summaries in English or Korean,
 // and listen to them narrated (audio made on demand by the `book-audio` edge function).
 
-type Lang = "en" | "ko";
+export type Lang = "en" | "ko";
 
-interface BookDoc {
+export interface BookDoc {
   id: string;
   story_slug: string;
   kind: "sample" | "summary";
@@ -19,6 +22,7 @@ interface BookDoc {
   body_ko: string;
   voice_en: string;
   voice_ko: string;
+  published?: boolean;
   updated_at: string;
 }
 
@@ -42,51 +46,122 @@ async function audioCall(body: Record<string, unknown>): Promise<AudioStatus> {
   return data as AudioStatus;
 }
 
+interface DocVersion {
+  id: string;
+  doc_id: string;
+  title_en: string;
+  title_ko: string;
+  body_en: string;
+  body_ko: string;
+  note: string;
+  created_at: string;
+}
+
+interface StoryRow {
+  slug: string;
+  title: string;
+  blurb: string;
+  status: "draft" | "published";
+  settings: { kind?: string } | null;
+}
+
+function titleOf(d: { title_en: string; title_ko: string; id: string }, lang: Lang) {
+  return (lang === "en" ? d.title_en || d.title_ko : d.title_ko || d.title_en) || d.id;
+}
+
 export function BookTab() {
   const [docs, setDocs] = useState<BookDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [slug, setSlug] = useState<string | null>(null);
   const [kind, setKind] = useState<"sample" | "summary">("sample");
   const [docId, setDocId] = useState<string | null>(null);
+  const [versions, setVersions] = useState<DocVersion[]>([]);
+  const [versionId, setVersionId] = useState<string>("");
+  const [story, setStory] = useState<StoryRow | null>(null);
+  const [showPublish, setShowPublish] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
   const [lang, setLang] = useState<Lang>(() => {
     try { return (localStorage.getItem("book-lang") as Lang) || "ko"; } catch { return "ko"; }
   });
 
-  useEffect(() => {
-    supabase.from("book_docs").select("*").order("position").then(({ data }) => {
-      const list = (data as BookDoc[]) ?? [];
-      setDocs(list);
-      setSlug(list[0]?.story_slug ?? null);
-      setLoading(false);
-    });
+  const loadDocs = useCallback(async () => {
+    const { data } = await supabase.from("book_docs").select("*").order("position");
+    const list = (data as BookDoc[]) ?? [];
+    setDocs(list);
+    setSlug((cur) => cur ?? list[0]?.story_slug ?? null);
+    setLoading(false);
   }, []);
 
+  useEffect(() => { loadDocs(); }, [loadDocs]);
   useEffect(() => { try { localStorage.setItem("book-lang", lang); } catch { /* ignore */ } }, [lang]);
 
+  const loadStory = useCallback(async () => {
+    if (!slug) { setStory(null); return; }
+    const { data } = await supabase.from("stories").select("slug, title, blurb, status, settings").eq("slug", slug).maybeSingle();
+    setStory((data as StoryRow | null) ?? null);
+  }, [slug]);
+  useEffect(() => { loadStory(); }, [loadStory]);
+
   const slugs = useMemo(() => Array.from(new Set(docs.map((d) => d.story_slug))), [docs]);
-  const ofKind = docs.filter((d) => d.story_slug === slug && d.kind === kind);
-  // Newest session's page first.
-  const doc = ofKind.find((d) => d.id === docId) ?? ofKind[ofKind.length - 1] ?? null;
+  const ofSlug = docs.filter((d) => d.story_slug === slug);
+  const chapters = ofSlug.filter((d) => d.kind === "sample").sort((a, b) => a.position - b.position);
+  // Bible / summaries: the living bible first, then the newest session's.
+  const summaries = ofSlug.filter((d) => d.kind === "summary")
+    .sort((a, b) => (a.id.endsWith("/bible") ? -1 : b.id.endsWith("/bible") ? 1 : b.position - a.position));
+  const ofKind = kind === "sample" ? chapters : summaries;
+  const doc = ofKind.find((d) => d.id === docId) ?? (kind === "sample" ? ofKind[0] : ofKind[0]) ?? null;
+
+  // Earlier versions of this page (kept whenever a revision rewrites it).
+  useEffect(() => {
+    setVersionId("");
+    if (!doc) { setVersions([]); return; }
+    supabase.from("book_doc_versions").select("*").eq("doc_id", doc.id).order("created_at", { ascending: false })
+      .then(({ data }) => setVersions((data as DocVersion[]) ?? []));
+  }, [doc?.id, doc?.updated_at]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (loading) return <div className="py-12 flex justify-center"><Loader2 className="animate-spin text-ink-400" /></div>;
+  if (!docs.length) {
+    return <p className="text-sm text-ink-500 font-sans">No book pages yet. Chapters and story bibles appear here after an interview is finished.</p>;
+  }
 
   // Books written in only one language (e.g. English ghostwriter projects) show no language toggle.
-  const ofSlug = docs.filter((d) => d.story_slug === slug);
   const hasEn = ofSlug.some((d) => d.body_en?.trim());
   const hasKo = ofSlug.some((d) => d.body_ko?.trim());
   const langs: Lang[] = hasEn && hasKo ? ["en", "ko"] : hasKo ? ["ko"] : ["en"];
   const shown: Lang = langs.includes(lang) ? lang : langs[0];
   const englishOnly = langs.length === 1 && langs[0] === "en";
+  const version = versions.find((v) => v.id === versionId) ?? null;
+  const body = version ? (shown === "en" ? version.body_en : version.body_ko) : doc ? (shown === "en" ? doc.body_en : doc.body_ko) : "";
+  const published = story?.status === "published" && story.settings?.kind === "book";
 
-  if (loading) return <div className="py-12 flex justify-center"><Loader2 className="animate-spin text-ink-400" /></div>;
-  if (!docs.length) {
-    return <p className="text-sm text-ink-500 font-sans">No book pages yet. Sample chapters and session summaries appear here once they're added.</p>;
-  }
+  const restore = async () => {
+    if (!doc || !version) return;
+    setMsg(null);
+    const { error: e1 } = await supabase.from("book_doc_versions").insert({
+      doc_id: doc.id, title_en: doc.title_en, title_ko: doc.title_ko, body_en: doc.body_en, body_ko: doc.body_ko,
+      note: "Before restoring an earlier version",
+    });
+    const { error: e2 } = await supabase.from("book_docs").update({
+      title_en: version.title_en, title_ko: version.title_ko, body_en: version.body_en, body_ko: version.body_ko,
+      updated_at: new Date().toISOString(),
+    }).eq("id", doc.id);
+    if (e1 || e2) { setMsg((e1 ?? e2)!.message); return; }
+    setMsg("Restored. The version you replaced is kept in the list.");
+    await loadDocs();
+  };
+
+  const idx = chapters.findIndex((c) => c.id === doc?.id);
+  const goChapter = (d: number) => {
+    const next = chapters[idx + d];
+    if (next) setDocId(next.id);
+  };
 
   return (
     <div className="space-y-5">
       {slugs.length > 1 && (
-        <div className="flex gap-2 font-sans">
+        <div className="flex flex-wrap gap-2 font-sans">
           {slugs.map((s) => (
-            <button key={s} onClick={() => { setSlug(s); setDocId(null); }}
+            <button key={s} onClick={() => { setSlug(s); setDocId(null); setShowPublish(false); }}
               className={`px-3 py-1.5 rounded-lg text-sm border ${s === slug ? "border-accent-400 text-accent-700 dark:text-accent-300" : "border-ink-200 dark:border-ink-700 text-ink-500"}`}>
               {s}
             </button>
@@ -97,7 +172,7 @@ export function BookTab() {
       <div className="flex flex-wrap items-center justify-between gap-3 font-sans">
         <div className="flex flex-wrap gap-2">
           <KindButton active={kind === "sample"} onClick={() => { setKind("sample"); setDocId(null); }} icon={<BookOpen size={16} />}>
-            {englishOnly ? "Chapter" : "Sample Chapter"}
+            Content
           </KindButton>
           <KindButton active={kind === "summary"} onClick={() => { setKind("summary"); setDocId(null); }} icon={<FileText size={16} />}>
             {englishOnly ? "Story Bible" : "Summary"}
@@ -109,32 +184,185 @@ export function BookTab() {
             </a>
           )}
         </div>
-        {langs.length > 1 && <div className="inline-flex rounded-lg border border-ink-200 dark:border-ink-700 overflow-hidden text-sm">
-          {langs.map((l) => (
-            <button key={l} onClick={() => setLang(l)}
-              className={`px-4 py-2 ${lang === l ? "bg-accent-500 text-white" : "text-ink-600 dark:text-ink-300 hover:bg-ink-100 dark:hover:bg-ink-800"}`}>
-              {l === "en" ? "English" : "한국어"}
+        <div className="flex flex-wrap items-center gap-2">
+          {langs.length > 1 && (
+            <div className="inline-flex rounded-lg border border-ink-200 dark:border-ink-700 overflow-hidden text-sm">
+              {langs.map((l) => (
+                <button key={l} onClick={() => setLang(l)}
+                  className={`px-4 py-2 ${lang === l ? "bg-accent-500 text-white" : "text-ink-600 dark:text-ink-300 hover:bg-ink-100 dark:hover:bg-ink-800"}`}>
+                  {l === "en" ? "English" : "한국어"}
+                </button>
+              ))}
+            </div>
+          )}
+          {chapters.length > 0 && (
+            <button onClick={() => setShowPublish((v) => !v)}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${published
+                ? "border border-success-500/40 text-success-600 bg-success-500/10"
+                : "bg-accent-500 text-white"}`}>
+              <Globe size={16} /> {published ? "Published" : "Publish"}
             </button>
-          ))}
-        </div>}
+          )}
+        </div>
       </div>
 
-      {ofKind.length > 1 && (
-        <select className="input-field !py-2 !w-auto font-sans text-sm" value={doc?.id ?? ""} onChange={(e) => setDocId(e.target.value)}>
-          {ofKind.map((d) => <option key={d.id} value={d.id}>{(shown === "en" ? d.title_en : d.title_ko) || d.title_en || d.title_ko || d.id}</option>)}
-        </select>
+      {showPublish && slug && (
+        <PublishPanel slug={slug} story={story} chapters={chapters} bible={summaries[0] ?? null} lang={shown}
+          onDone={async () => { await loadStory(); await loadDocs(); }} />
       )}
+
+      {/* Which page: chapter picker for Content, page picker for the bible */}
+      {ofKind.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 font-sans">
+          {kind === "sample" && (
+            <button onClick={() => goChapter(-1)} disabled={idx <= 0} className="btn-ghost !px-2 disabled:opacity-30" aria-label="Previous chapter">
+              <ChevronLeft size={18} />
+            </button>
+          )}
+          <select className="input-field !py-2 !w-auto text-sm max-w-full" value={doc?.id ?? ""} onChange={(e) => setDocId(e.target.value)}>
+            {ofKind.map((d) => (
+              <option key={d.id} value={d.id}>
+                {titleOf(d, shown)}{kind === "sample" && published ? (d.published ? "  · live" : "  · not published") : ""}
+              </option>
+            ))}
+          </select>
+          {kind === "sample" && (
+            <button onClick={() => goChapter(1)} disabled={idx < 0 || idx >= chapters.length - 1} className="btn-ghost !px-2 disabled:opacity-30" aria-label="Next chapter">
+              <ChevronRight size={18} />
+            </button>
+          )}
+          {versions.length > 0 && (
+            <select className="input-field !py-2 !w-auto text-sm" value={versionId} onChange={(e) => setVersionId(e.target.value)}>
+              <option value="">Current version</option>
+              {versions.map((v) => (
+                <option key={v.id} value={v.id}>
+                  Earlier · {new Date(v.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })} {new Date(v.created_at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
+                </option>
+              ))}
+            </select>
+          )}
+          {englishOnly && doc && !version && (
+            <a href={`/interview/${slug}?revise=${kind === "sample" ? encodeURIComponent(doc.id) : ""}`} target="_blank" rel="noreferrer"
+              className="btn-secondary !py-2 !px-3 text-sm inline-flex items-center gap-1.5 ml-auto">
+              <MessageSquare size={15} /> Give notes
+            </a>
+          )}
+        </div>
+      )}
+
+      {version && (
+        <div className="card px-4 py-3 flex flex-wrap items-center gap-3 font-sans text-sm border-warning-500/40 bg-warning-500/5">
+          <History size={16} className="text-warning-600" />
+          <span className="text-ink-700 dark:text-ink-200">
+            You're looking at an earlier version{version.note ? ` (${version.note.toLowerCase()})` : ""}.
+          </span>
+          <button onClick={restore} className="btn-primary !py-1.5 !px-3 text-sm ml-auto">Restore this version</button>
+          <button onClick={() => setVersionId("")} className="btn-ghost !py-1.5 text-sm">Back to current</button>
+        </div>
+      )}
+      {msg && <p className="text-sm text-ink-600 dark:text-ink-300 font-sans">{msg}</p>}
 
       {doc ? (
         <>
-          <AudioBar key={`${doc.id}:${shown}:${doc.updated_at}`} doc={doc} lang={shown} />
+          {!version && <AudioBar key={`${doc.id}:${shown}:${doc.updated_at}`} doc={doc} lang={shown} />}
           <article lang={shown} className="card px-6 sm:px-10 py-8">
-            <Markdown text={shown === "en" ? doc.body_en : doc.body_ko} lang={shown} />
+            <Markdown text={body} lang={shown} />
           </article>
         </>
       ) : (
         <p className="text-sm text-ink-500 font-sans">Nothing here yet.</p>
       )}
+    </div>
+  );
+}
+
+// ── Publish to the Library ────────────────────────────────────────────────
+
+function PublishPanel({ slug, story, chapters, bible, lang, onDone }: {
+  slug: string; story: StoryRow | null; chapters: BookDoc[]; bible: BookDoc | null; lang: Lang; onDone: () => void;
+}) {
+  const live = story?.status === "published" && story.settings?.kind === "book";
+  const conflict = !!story && story.settings?.kind !== "book";
+  // Suggest a title from the bible ("Working title: ...") the first time.
+  const suggested = useMemo(() => {
+    const text = bible ? (lang === "en" ? bible.body_en : bible.body_ko) : "";
+    const m = text.match(/working title[^:\n]*:\s*\**["“]?([^"”\n*]+)/i);
+    return m?.[1]?.trim() ?? slug.split("-").map((w) => w[0]?.toUpperCase() + w.slice(1)).join(" ");
+  }, [bible, lang, slug]);
+  const suggestedBlurb = useMemo(() => {
+    const text = bible ? (lang === "en" ? bible.body_en : bible.body_ko) : "";
+    const m = text.match(/logline[^:\n]*:?\**\s*\n*\s*([^\n#]{30,400})/i);
+    return m?.[1]?.replace(/\*\*/g, "").trim() ?? "";
+  }, [bible, lang]);
+  const [title, setTitle] = useState(story?.title ?? suggested);
+  const [blurb, setBlurb] = useState(story?.blurb ?? suggestedBlurb);
+  const [picked, setPicked] = useState<string[]>(() => {
+    const already = chapters.filter((c) => c.published).map((c) => c.id);
+    return already.length ? already : chapters.map((c) => c.id);
+  });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const publish = async () => {
+    setBusy(true); setMsg(null);
+    try {
+      await interviewApi.publishBook({ story_slug: slug, title: title.trim(), blurb: blurb.trim(), chapter_ids: picked });
+      setMsg("Published. It's in the Library now.");
+      onDone();
+    } catch (e) { setMsg((e as Error).message); }
+    setBusy(false);
+  };
+  const unpublish = async () => {
+    setBusy(true); setMsg(null);
+    try { await interviewApi.unpublishBook(slug); setMsg("Taken down from the Library."); onDone(); }
+    catch (e) { setMsg((e as Error).message); }
+    setBusy(false);
+  };
+
+  if (conflict) {
+    return <div className="card p-4 text-sm font-sans text-warning-600">An interactive story already uses the slug "{slug}", so this book can't be published under it.</div>;
+  }
+
+  return (
+    <div className="card p-5 space-y-4 font-sans">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="font-serif text-lg text-ink-900 dark:text-ink-50">{live ? "Published in the Library" : "Publish to the Library"}</h3>
+          <p className="text-sm text-ink-500 mt-1">
+            Anyone can read the chapters you tick, with narration once it's recorded here.
+            {live && <> Reader link: <a href={`/book/${slug}`} target="_blank" rel="noreferrer" className="text-accent-600 underline">/book/{slug}</a></>}
+          </p>
+        </div>
+      </div>
+      <div className="grid sm:grid-cols-2 gap-3">
+        <label className="block">
+          <span className="block text-xs text-ink-500 mb-1">Title</span>
+          <input className="input-field !py-2" value={title} onChange={(e) => setTitle(e.target.value)} />
+        </label>
+        <label className="block sm:row-span-2">
+          <span className="block text-xs text-ink-500 mb-1">Blurb (shown on the Library card)</span>
+          <textarea className="input-field !py-2 text-sm" rows={4} value={blurb} onChange={(e) => setBlurb(e.target.value)} />
+        </label>
+        <div>
+          <span className="block text-xs text-ink-500 mb-1">Chapters</span>
+          <div className="space-y-1.5">
+            {chapters.map((c) => (
+              <label key={c.id} className="flex items-center gap-2 text-sm text-ink-700 dark:text-ink-200">
+                <input type="checkbox" checked={picked.includes(c.id)}
+                  onChange={(e) => setPicked((p) => e.target.checked ? [...p, c.id] : p.filter((x) => x !== c.id))} />
+                {titleOf(c, lang)}
+              </label>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <button className="btn-primary !py-2" onClick={publish} disabled={busy || !title.trim() || !picked.length}>
+          {busy ? <Loader2 size={15} className="animate-spin" /> : <Globe size={15} />} {live ? "Update" : "Publish"}
+        </button>
+        {live && <button className="btn-secondary !py-2" onClick={unpublish} disabled={busy}>Unpublish</button>}
+        {msg && <span className="text-sm text-ink-600 dark:text-ink-300">{msg}</span>}
+      </div>
     </div>
   );
 }
@@ -154,7 +382,7 @@ function KindButton({ active, onClick, icon, children }: { active: boolean; onCl
 
 // ── Audio ────────────────────────────────────────────────────────────────
 
-function AudioBar({ doc, lang }: { doc: BookDoc; lang: Lang }) {
+export function AudioBar({ doc, lang, readOnly = false }: { doc: BookDoc; lang: Lang; readOnly?: boolean }) {
   const [status, setStatus] = useState<AudioStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -222,6 +450,9 @@ function AudioBar({ doc, lang }: { doc: BookDoc; lang: Lang }) {
     try { localStorage.setItem("book-rate", String(rate)); } catch { /* ignore */ }
   }, [rate]);
 
+  // Public reader: only a player, and only once narration exists.
+  if (readOnly && !ready) return null;
+
   const voiceId = lang === "ko" ? doc.voice_ko : doc.voice_en;
   const voiceName = voiceId === "UzElYEdLTwdjry68bt1c" ? "Daegu voice" : voiceId === "kNjmAhXxYgxjF0oyxw4c" ? "Matthew" : "Narrator";
   const voiceLabel = `${voiceName} · ${lang === "ko" ? "한국어" : "English"}`;
@@ -241,9 +472,11 @@ function AudioBar({ doc, lang }: { doc: BookDoc; lang: Lang }) {
             {[0.6, 0.7, 0.75, 0.8, 0.85, 0.9, 1, 1.1, 1.25].map((r) => <option key={r} value={r}>{r}×</option>)}
           </select>
           <span className="text-xs text-ink-400 ml-auto">{voiceLabel}</span>
-          <button onClick={() => generate(true)} disabled={busy} className="btn-ghost !px-2 !py-1 text-xs" title="Re-record">
-            <RefreshCw size={13} />
-          </button>
+          {!readOnly && (
+            <button onClick={() => generate(true)} disabled={busy} className="btn-ghost !px-2 !py-1 text-xs" title="Re-record">
+              <RefreshCw size={13} />
+            </button>
+          )}
         </>
       ) : busy ? (
         <span className="text-sm text-ink-600 dark:text-ink-300 inline-flex items-center gap-2">
@@ -282,8 +515,9 @@ function inline(s: string): React.ReactNode[] {
   return out;
 }
 
-function Markdown({ text, lang }: { text: string; lang: Lang }) {
-  const blocks = text.trim().split(/\n\s*\n/);
+export function Markdown({ text, lang }: { text: string; lang: Lang }) {
+  // Headings always stand alone, even when the text has no blank line after them.
+  const blocks = text.trim().replace(/^(#{1,6} .*)$/gm, "\n$1\n").split(/\n\s*\n/).filter((b) => b.trim());
   const korean = lang === "ko";
   return (
     <div className={`text-ink-800 dark:text-ink-200 ${korean ? "font-sans text-[17px] leading-[1.9] break-keep" : "font-serif text-[18px] leading-relaxed"}`}>

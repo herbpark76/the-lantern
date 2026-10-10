@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
 
 export type InterviewMode = "memoir" | "ghostwriter";
+export type SessionKind = "interview" | "revise";
 
 // ── Types shared by the /interview page and Studio > Interviews ──
 
@@ -28,6 +29,8 @@ export interface InterviewSession {
   subject_id: string;
   session_no: number;
   era: string;
+  kind?: SessionKind;
+  target_doc?: string | null;
   status: "active" | "finishing" | "finished";
   started_at: string;
   last_activity_at: string;
@@ -74,7 +77,12 @@ export interface InterviewChoice {
 
 export interface InterviewState {
   subject: { id: string; display_name: string; honorific: string; language: string; mode: InterviewMode; story_slug: string };
-  session: { id: string; session_no: number; era: string; started_at: string } | null;
+  session: {
+    id: string; session_no: number; era: string; started_at: string;
+    kind?: SessionKind; target_doc?: string | null; target_title?: string | null;
+  } | null;
+  /** Ghostwriter books: chapters written so far (for notes sessions). */
+  chapters?: Array<{ id: string; title: string }>;
   question: Question | null;
   last_answer: string | null;
   answers_count: number;
@@ -157,7 +165,8 @@ function turn<T>(action: string, extra: Record<string, unknown> = {}) {
 
 export const interviewApi = {
   state: () => turn<InterviewState>("state"),
-  start: () => turn<InterviewState>("start"),
+  start: (opts?: { kind?: SessionKind; target_doc?: string | null }) =>
+    turn<InterviewState>("start", opts?.kind === "revise" ? { kind: "revise", target_doc: opts.target_doc ?? null } : {}),
   answerAudio: (audio: Blob, durationMs: number) => {
     const form = new FormData();
     const ext = audio.type.includes("webm") ? "webm" : "m4a";
@@ -175,6 +184,10 @@ export const interviewApi = {
   // Staff
   createSubject: (p: { email: string; password?: string; display_name: string; story_slug: string; honorific?: string; mode?: InterviewMode; language?: string }) =>
     invoke<{ subject: InterviewSubject; account_created: boolean }>("interview-admin", { action: "create_subject", ...p }),
+  publishBook: (p: { story_slug: string; title: string; blurb: string; chapter_ids: string[] }) =>
+    invoke<{ ok: boolean; status: string }>("interview-admin", { action: "publish_book", ...p }),
+  unpublishBook: (story_slug: string) =>
+    invoke<{ ok: boolean; status: string }>("interview-admin", { action: "unpublish_book", story_slug }),
   setPassword: (subject_id: string, password: string) =>
     invoke<{ ok: boolean }>("interview-admin", { action: "set_password", subject_id, password }),
   sessionAudio: (session_id: string) =>

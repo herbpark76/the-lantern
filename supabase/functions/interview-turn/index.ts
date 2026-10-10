@@ -5,7 +5,8 @@
 // with several and none named, "state" returns { choose: [...] } for a picker.
 //
 //   { action: "state" }                 → subject + active session + current question
-//   { action: "start" }                 → start a session (or return the active one)
+//   { action: "start", kind?, target_doc? } → start a session (or return the active one).
+//       Ghostwriter books: kind "revise" = a notes session on chapter target_doc (or the bible).
 //   { action: "answer_text", text }     → her answer as typed text (testing / fallback)
 //   { action: "skip" }                  → she wants to skip the current question
 //   { action: "redo" }                  → undo her last answer + the reply, re-ask
@@ -14,7 +15,7 @@
 //   action=answer, audio=<file>, duration_ms=<number> → her spoken answer
 
 import {
-  admin, callClaude, cleanSpoken, corsHeaders, estimateCost, getCaller, systemPromptFor, strings,
+  admin, bookChapters, callClaude, docTitle, revisionContext, cleanSpoken, corsHeaders, estimateCost, getCaller, systemPromptFor, strings,
   json, jsonError, monthSpend, SERVICE_ROLE_KEY, signedUrl, speechToText, SUPABASE_URL, textToSpeech,
   BUCKET, type ClaudeMessage, type Session, type Subject, type Turn,
 } from "../_shared/interview.ts";
@@ -27,7 +28,7 @@ const NO_SUBJECT = "아직 준비가 안 됐어요. 아드님께 말씀해 주�
 const BUSY = "잠깐 문제가 생겼어요. 조금 있다가 다시 눌러 주세요.";
 
 function buildMessages(subject: Subject, session: Session, turns: Turn[], extraUser?: string): ClaudeMessage[] {
-  const L = strings(subject);
+  const L = strings(subject, session);
   const msgs: ClaudeMessage[] = [{ role: "user", content: L.start(session.session_no) }];
   const push = (role: "user" | "assistant", content: string) => {
     const last = msgs[msgs.length - 1];
@@ -103,7 +104,8 @@ async function interviewerSpeaks(
   db: SupabaseClient, subject: Subject, session: Session, turns: Turn[], extraUser?: string,
 ): Promise<{ turn: Turn; audio_url: string | null }> {
   const earlier = await earlierSessions(db, subject.id, session.session_no);
-  const system = systemPromptFor(subject, session, earlier);
+  const rev = session.kind === "revise" ? await revisionContext(db, subject, session) : null;
+  const system = systemPromptFor(subject, session, earlier, rev);
   // Plenty of room: newer models can spend part of the budget before the visible reply.
   const result = await callClaude(system, buildMessages(subject, session, turns, extraUser), 1500);
   const text = cleanSpoken(result.text) || (subject.language === "en" ? "Tell me a little more about that?" : "그 얘기 조금 더 해 주시겠어요?");
@@ -138,15 +140,32 @@ function publicSubject(s: Subject) {
 }
 
 async function stateResponse(db: SupabaseClient, subject: Subject, session: Session | null, turns: Turn[]) {
+  return json({ ...(await stateBody(db, subject, session, turns)) });
+}
+
+async function stateBody(db: SupabaseClient, subject: Subject, session: Session | null, turns: Turn[]) {
+  // Ghostwriter books: the chapters written so far (for "give notes on a chapter").
+  const chapters = subject.mode === "ghostwriter"
+    ? (await bookChapters(db, subject.story_slug)).map((c) => ({ id: c.id, title: docTitle(c, subject.language) }))
+    : [];
   const lastInterviewer = [...turns].reverse().find((t) => t.speaker === "interviewer") ?? null;
   const lastSubject = [...turns].reverse().find((t) => t.speaker === "subject" && !t.skipped) ?? null;
-  return json({
+  return {
     subject: publicSubject(subject),
-    session: session ? { id: session.id, session_no: session.session_no, era: session.era, started_at: session.started_at } : null,
+    session: session ? publicSession(session, chapters) : null,
+    chapters,
     question: lastInterviewer ? { id: lastInterviewer.id, text: lastInterviewer.text, audio_url: await signedUrl(db, lastInterviewer.audio_path) } : null,
     last_answer: lastSubject && lastInterviewer && lastSubject.turn_no < lastInterviewer.turn_no ? lastSubject.text : null,
     answers_count: turns.filter((t) => t.speaker === "subject").length,
-  });
+  };
+}
+
+function publicSession(s: Session, chapters: Array<{ id: string; title: string }>) {
+  return {
+    id: s.id, session_no: s.session_no, era: s.era, started_at: s.started_at,
+    kind: s.kind ?? "interview", target_doc: s.target_doc ?? null,
+    target_title: s.target_doc ? chapters.find((c) => c.id === s.target_doc)?.title ?? null : null,
+  };
 }
 
 Deno.serve(async (req: Request) => {
@@ -208,21 +227,29 @@ Deno.serve(async (req: Request) => {
         const { data: last } = await db
           .from("interview_sessions").select("session_no").eq("subject_id", subject.id)
           .order("session_no", { ascending: false }).limit(1).maybeSingle();
+        // Ghostwriter books can start a notes/revision session on one chapter (or on the bible).
+        const revise = subject.mode === "ghostwriter" && body.kind === "revise";
+        let targetDoc: string | null = null;
+        if (revise && body.target_doc) {
+          const chapters = await bookChapters(db, subject.story_slug);
+          targetDoc = chapters.find((c) => c.id === String(body.target_doc))?.id ?? null;
+        }
         const { data: created, error } = await db
           .from("interview_sessions")
-          .insert({ subject_id: subject.id, session_no: ((last as { session_no?: number } | null)?.session_no ?? 0) + 1, era: subject.mode === "ghostwriter" ? "free" : (subject.next_era || "free") })
+          .insert({
+            subject_id: subject.id,
+            session_no: ((last as { session_no?: number } | null)?.session_no ?? 0) + 1,
+            era: subject.mode === "ghostwriter" ? "free" : (subject.next_era || "free"),
+            kind: revise ? "revise" : "interview",
+            target_doc: targetDoc,
+          })
           .select().single();
         if (error) throw new Error(error.message);
         session = created as Session;
       }
       const { turn, audio_url } = await interviewerSpeaks(db, subject, session!, []);
-      return json({
-        subject: publicSubject(subject),
-        session: { id: session!.id, session_no: session!.session_no, era: session!.era, started_at: session!.started_at },
-        question: { id: turn.id, text: turn.text, audio_url },
-        last_answer: null,
-        answers_count: 0,
-      });
+      const base = await stateBody(db, subject, session, []);
+      return json({ ...base, question: { id: turn.id, text: turn.text, audio_url }, last_answer: null, answers_count: 0 });
     }
 
     if (!session) return jsonError(409, "No active session", "no_session");
@@ -297,7 +324,7 @@ Deno.serve(async (req: Request) => {
         try {
           const { turn, audio_url } = await interviewerSpeaks(
             db, subject, session, turns,
-            MSG.closing,
+            strings(subject, session).closing,
           );
           closing = { text: turn.text, audio_url };
         } catch (e) {

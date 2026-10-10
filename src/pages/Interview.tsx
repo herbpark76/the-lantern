@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Mic, Square, RotateCcw, SkipForward, Volume2, Loader2, Keyboard, Send, X, Pause } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import { interviewApi, InterviewError, pickRecorderMime, setInterviewSlug, SILENT_WAV, type InterviewChoice, type InterviewState, type Question } from "@/lib/interview";
+import { interviewApi, InterviewError, pickRecorderMime, setInterviewSlug, SILENT_WAV, type InterviewChoice, type InterviewState, type Question, type SessionKind } from "@/lib/interview";
 
 // Voice-first interview page. Large type, one big button, designed for an iPhone held in one hand.
 // Korean for the memoir interviews (Mom); English for ghostwriter projects (/interview/<slug>).
@@ -216,6 +216,18 @@ export function InterviewPage({ slug }: { slug?: string }) {
   const lang: Lang = state?.subject.language === "en" ? "en" : state?.subject.language === "ko" ? "ko" : slug ? "en" : "ko";
   const T = STR[lang];
   const ghost = state?.subject.mode === "ghostwriter";
+  // Notes session target: "" = general notes on the bible. Preselected by /interview/<slug>?revise=<chapter id>.
+  const [notesTarget, setNotesTarget] = useState<string>(() => {
+    try { return new URLSearchParams(window.location.search).get("revise") ?? ""; } catch { return ""; }
+  });
+  const wantsNotes = (() => {
+    try { return new URLSearchParams(window.location.search).has("revise"); } catch { return false; }
+  })();
+  // Without a ?revise= link, default the notes picker to the newest chapter.
+  useEffect(() => {
+    const list = state?.chapters ?? [];
+    if (!wantsNotes && list.length) setNotesTarget((cur) => cur || list[list.length - 1].id);
+  }, [state?.chapters, wantsNotes]);
 
   // Force a light, warm page and keep iOS from bouncing.
   useEffect(() => {
@@ -280,7 +292,7 @@ export function InterviewPage({ slug }: { slug?: string }) {
   };
 
   // ── Start / resume (first tap) ──
-  const handleBegin = async () => {
+  const handleBegin = async (opts?: { kind?: SessionKind; target_doc?: string | null }) => {
     // Unlock audio inside the tap gesture, before any await.
     const a = getAudio();
     a.src = SILENT_WAV;
@@ -298,7 +310,7 @@ export function InterviewPage({ slug }: { slug?: string }) {
     setError(null); setErrorDetail(null);
     setPhase("thinking");
     try {
-      const s = await interviewApi.start();
+      const s = await interviewApi.start(opts);
       setState(s);
       setQuestion(s.question);
       setHerText(s.last_answer);
@@ -623,21 +635,56 @@ export function InterviewPage({ slug }: { slug?: string }) {
 
   if (phase === "welcome") {
     const resuming = !!state?.session;
+    const revising = state?.session?.kind === "revise";
+    const chapters = state?.chapters ?? [];
     return (
       <Shell>
         <div className="flex-1 flex flex-col items-center justify-center text-center gap-8 px-2">
           <div className="space-y-3">
             <p className="text-4xl font-semibold leading-snug">{T.hello(honorific)}</p>
             <p className="text-2xl text-[#5c5447] leading-relaxed">
-              {resuming ? T.resumeQ : T.invite(honorific)}
+              {resuming
+                ? (revising ? `Pick up your notes on ${state?.session?.target_title ?? "the story"}?` : T.resumeQ)
+                : ghost && wantsNotes ? "What would you like to change?"
+                : ghost && chapters.length ? "Keep building the story, or give notes on what's written." : T.invite(honorific)}
             </p>
           </div>
-          <button
-            onClick={handleBegin}
-            className="w-full max-w-xs py-6 rounded-3xl bg-[#b0642e] text-white text-3xl font-semibold shadow-lg active:scale-[0.98] transition-transform"
-          >
-            {resuming ? T.resumeBtn : T.startBtn}
-          </button>
+          {(resuming || !ghost || !wantsNotes) && (
+            <button
+              onClick={() => handleBegin()}
+              className="w-full max-w-xs py-6 rounded-3xl bg-[#b0642e] text-white text-3xl font-semibold shadow-lg active:scale-[0.98] transition-transform"
+            >
+              {resuming ? T.resumeBtn : ghost ? "New interview" : T.startBtn}
+            </button>
+          )}
+          {ghost && !resuming && (
+            <div className={`w-full max-w-xs space-y-3 text-left ${wantsNotes ? "" : "pt-2 border-t border-[#e8e4dc]"}`}>
+              <p className="text-lg text-[#5c5447] text-center pt-2">
+                {wantsNotes ? "Talk through your notes. I'll update the bible and revise the chapter." : "Or give notes on what's written"}
+              </p>
+              <select
+                value={notesTarget}
+                onChange={(e) => setNotesTarget(e.target.value)}
+                className="w-full rounded-2xl border border-[#d4cec1] bg-white px-4 py-3.5 text-lg"
+              >
+                {chapters.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
+                <option value="">General notes (story bible)</option>
+              </select>
+              <button
+                onClick={() => handleBegin({ kind: "revise", target_doc: notesTarget || null })}
+                className={`w-full py-4 rounded-3xl text-2xl font-semibold active:scale-[0.98] transition-transform ${
+                  wantsNotes ? "bg-[#b0642e] text-white shadow-lg py-6 text-3xl" : "bg-[#efe8dc] text-[#453f35]"
+                }`}
+              >
+                Give notes
+              </button>
+              {wantsNotes && (
+                <button onClick={() => handleBegin()} className="w-full py-2 text-base text-[#7a7160] underline underline-offset-4">
+                  Start a new interview instead
+                </button>
+              )}
+            </div>
+          )}
           {error && <p className="text-xl text-[#b04a4a]">{error}</p>}
           <p className="text-lg text-[#7a7160] leading-relaxed">
             {autoListen ? T.hintAuto : T.hintManual}
@@ -656,8 +703,12 @@ export function InterviewPage({ slug }: { slug?: string }) {
           {closingText && <p className="text-2xl leading-relaxed text-[#453f35]">{closingText}</p>}
           {ghost && (
             <p className="text-lg text-[#7a7160] leading-relaxed">
-              The story bible, outline and opening chapter take a few minutes.
-              They'll show up in <a href="/studio" className="underline underline-offset-4">Studio → Book</a>.
+              {state?.session?.kind === "revise"
+                ? (state.session.target_doc
+                    ? "The revised chapter and updated bible take a few minutes. The previous version is kept."
+                    : "The updated story bible takes a minute or two.")
+                : "The updated story bible and the next chapter take a few minutes."}
+              {" "}They'll show up in <a href="/studio" className="underline underline-offset-4">Studio → Book</a>.
             </p>
           )}
           <button

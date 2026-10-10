@@ -25,6 +25,7 @@ interface BookDoc {
   speed: number;
   audio_en: AudioState | null;
   audio_ko: AudioState | null;
+  published?: boolean;
 }
 
 interface AudioState {
@@ -110,15 +111,21 @@ Deno.serve(async (req: Request) => {
 
   try {
     const user = await getCaller(req);
-    if (!user) return jsonError(401, "Authentication required");
     const db = admin();
-    const staff = await isStaffUser(db, user.id);
+    const staff = user ? await isStaffUser(db, user.id) : false;
 
     const { action = "status", id, lang } = await req.json().catch(() => ({}));
     if (!id || (lang !== "en" && lang !== "ko")) return jsonError(400, "id and lang (en|ko) are required");
     const doc = await load(db, id);
     if (!doc) return jsonError(404, "Not found");
 
+    // Anyone may listen to a published chapter of a published book.
+    if (!staff && action === "status" && doc.published) {
+      const { data: story } = await db.from("stories").select("status").eq("slug", doc.story_slug).maybeSingle();
+      if ((story as { status?: string } | null)?.status === "published") return json(await status(db, doc, lang));
+    }
+
+    if (!user) return jsonError(401, "Authentication required");
     if (!staff) {
       const { data: subj } = await db.from("interview_subjects").select("id")
         .eq("user_id", user.id).eq("story_slug", doc.story_slug).limit(1);

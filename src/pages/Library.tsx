@@ -36,7 +36,7 @@ export function LibraryPage() {
           The Lantern
         </h1>
         <p className="text-lg text-ink-500 dark:text-ink-400 font-serif italic max-w-xl mx-auto">
-          Interactive branching novels where every choice shapes the story.
+          Interactive branching novels where every choice shapes the story, and books to read or listen to.
         </p>
       </div>
 
@@ -51,7 +51,7 @@ export function LibraryPage() {
           {stories.map((story) => (
             <button
               key={story.slug}
-              onClick={() => navigate(`/story/${story.slug}`)}
+              onClick={() => navigate(story.settings?.kind === "book" ? `/book/${story.slug}` : `/story/${story.slug}`)}
               className="card card-hover p-6 text-left group animate-fade-in"
               style={{ borderTopWidth: "3px", borderTopColor: story.settings?.accent_color ?? "#c97b3a" }}
             >

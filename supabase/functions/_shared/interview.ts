@@ -78,6 +78,8 @@ export interface Session {
   subject_id: string;
   session_no: number;
   era: string;
+  kind: "interview" | "revise";
+  target_doc: string | null;
   status: "active" | "finishing" | "finished";
   started_at: string;
   last_activity_at: string;
@@ -191,10 +193,11 @@ export const ERAS: Record<string, { label: string; questions: string[] }> = {
 
 // ── Words the server says, per interview language ───────────────────────
 
-export function strings(subject: Subject) {
+export function strings(subject: Subject, session?: Pick<Session, "kind"> | null) {
   const en = subject.language === "en";
   const name = subject.honorific || subject.display_name;
   const ghost = subject.mode === "ghostwriter";
+  const revise = ghost && session?.kind === "revise";
   return {
     busy: en ? "Something went wrong for a moment. Please try again." : "잠깐 문제가 생겼어요. 조금 있다가 다시 눌러 주세요.",
     budget: en ? "This month's interview budget is used up." : "이번 달 이야기 시간을 다 썼어요. 아드님께 말씀해 주세요.",
@@ -204,6 +207,9 @@ export function strings(subject: Subject) {
       ? "(They'd like to skip this question. Move on to a different one without comment.)"
       : `(${name}께서 이 질문은 넘어가고 싶다고 하셨습니다. 다른, 가벼운 질문으로 넘어가 주세요.)`,
     start: (sessionNo: number) => {
+      if (revise) {
+        return `(Conversation start: a notes and revision session. Greet ${name} by name, say in one sentence that you've read what's written so far and you're here to hear what they'd like to change, deepen or add, then ask one open first question about their overall reaction.)`;
+      }
       if (ghost) {
         return sessionNo === 1
           ? `(Conversation start, session 1. Greet ${name} warmly by name, say in one short sentence that you're their ghostwriter here to turn their idea into a story, then ask your first question.)`
@@ -218,7 +224,9 @@ export function strings(subject: Subject) {
         ? `(대화 시작. 이번이 첫 번째 이야기 시간입니다. ${name}께 따뜻하게 인사하고, 아드님이 ${name}의 이야기를 책으로 쓰려고 준비한 AI 도우미라고 아주 짧게 소개한 뒤, 오늘의 첫 질문을 해 주세요.)`
         : `(대화 시작. ${sessionNo}번째 이야기 시간입니다. ${name}께 반갑게 인사하고, 지난번 이야기를 한 가지 짧게 언급한 뒤, 오늘의 첫 질문을 해 주세요.)`;
     },
-    closing: ghost
+    closing: revise
+      ? "(They're finishing. Don't ask a question. In one or two short sentences, thank them and say you'll update the story bible with their notes and write a revised version of the chapter, keeping the previous version, and it'll be ready in Studio under Book in a few minutes. If this session had no chapter, say only that you'll update the story bible.)"
+      : ghost
       ? "(They're finishing for now. Don't ask a question. In one or two short sentences, thank them and say you'll now write up the story bible, outline and an opening chapter, which will be ready in Studio under Book in a few minutes.)"
       : en
         ? "(They'd like to stop for today. Don't ask a question. In one or two sentences, warmly thank them for what they shared and say you look forward to next time.)"
@@ -274,10 +282,52 @@ ${subject.background?.trim() || "(none)"}
 This is session ${session.session_no}.`;
 }
 
-export function systemPromptFor(subject: Subject, session: Session, earlier: Session[]): string {
+export interface RevisionContext {
+  bible: string;
+  chapterTitle: string | null;
+  chapter: string | null;
+  chapterList: string[];
+}
+
+export function systemPromptFor(subject: Subject, session: Session, earlier: Session[], rev?: RevisionContext | null): string {
+  if (subject.mode === "ghostwriter" && session.kind === "revise") return revisionSystemPrompt(subject, session, rev ?? null);
   return subject.mode === "ghostwriter"
     ? ghostwriterSystemPrompt(subject, session, earlier)
     : interviewerSystemPrompt(subject, session, earlier);
+}
+
+// ── Revision ("notes") prompt: an editor hearing what the author wants changed ──
+
+export function revisionSystemPrompt(subject: Subject, session: Session, rev: RevisionContext | null): string {
+  const name = subject.honorific || subject.display_name;
+  const focus = rev?.chapter
+    ? `This session is about "${rev.chapterTitle}". Its full text is below. Their notes will be used to rewrite it, and anything general goes into the story bible.`
+    : "This session is for general notes on the story: anything they say goes into the story bible (characters, plot, tone, world, ending, ideas for later chapters).";
+  return `You are a warm, perceptive book editor working with ${name}, the author, by voice. You and a ghostwriter have been building their story together. ${focus}
+
+Everything you write is spoken aloud by a text-to-speech voice; their answers reach you as speech-to-text transcripts (small errors are normal; infer the meaning, never mention them).
+
+# How to speak
+- ONE question per turn, 1–3 short sentences, always under 70 words. No lists, headings, emojis, brackets or parentheses. Always finish with the question.
+- Start broad (overall reaction, what landed, what didn't), then get specific: scenes, characters, dialogue, voice, pacing, what's missing, what should be cut, how it should feel.
+- When they give a note, make sure you understand it well enough to act on it: ask what it should be instead, or offer a quick concrete option ("so instead of telling us, we'd see him…?") and ask if that's it.
+- Refer to specifics from the text so they know you've read it. Quote at most a few words.
+- They're the author: don't defend the draft or argue; you may briefly suggest an idea when they're unsure.
+- Now and then, briefly play back the notes so far in one sentence so they can correct you.
+- When you have clear, actionable notes (usually 6–15 answers), say in one or two sentences that they can tap Finish to have the ${rev?.chapter ? "chapter rewritten and the bible updated" : "bible updated"}, or keep going. If they want to stop or take a break, say they can tap Pause, or Finish to apply what you have.
+- Never rewrite the text here.
+
+# Story bible (current)
+${rev?.bible?.trim() || "(no bible yet)"}
+
+# Chapters written so far
+${rev?.chapterList.length ? rev.chapterList.map((t) => `- ${t}`).join("\n") : "(none)"}
+${rev?.chapter ? `\n# The chapter under review: ${rev.chapterTitle}\n\n${rev.chapter}` : ""}
+
+# Notes from the author for you
+${subject.interviewer_notes?.trim() || "(none)"}
+
+This is session ${session.session_no}.`;
 }
 
 // ── Interviewer prompt ───────────────────────────────────────────────────
@@ -500,4 +550,53 @@ export async function monthSpend(db: SupabaseClient, subjectId: string): Promise
     .eq("subject_id", subjectId)
     .gte("started_at", since.toISOString());
   return (data ?? []).reduce((sum: number, s: { est_cost_usd: number }) => sum + Number(s.est_cost_usd || 0), 0);
+}
+
+// ── Books (book_docs): chapters and the living story bible ──────────────
+
+export interface ChapterRow {
+  id: string;
+  position: number;
+  title_en: string;
+  title_ko: string;
+  body_en: string;
+  body_ko: string;
+}
+
+export function docTitle(d: { title_en: string; title_ko: string; id: string }, lang: string): string {
+  return (lang === "ko" ? d.title_ko || d.title_en : d.title_en || d.title_ko) || d.id;
+}
+
+export function docBody(d: { body_en: string; body_ko: string }, lang: string): string {
+  return lang === "ko" ? d.body_ko || d.body_en : d.body_en || d.body_ko;
+}
+
+export async function bookChapters(db: SupabaseClient, slug: string): Promise<ChapterRow[]> {
+  const { data } = await db.from("book_docs")
+    .select("id, position, title_en, title_ko, body_en, body_ko")
+    .eq("story_slug", slug).eq("kind", "sample").order("position");
+  return (data as ChapterRow[]) ?? [];
+}
+
+/** The living bible (<slug>/bible), or else the newest per-session bible. */
+export async function currentBible(db: SupabaseClient, slug: string, lang: string): Promise<string> {
+  const { data } = await db.from("book_docs")
+    .select("id, position, body_en, body_ko, updated_at")
+    .eq("story_slug", slug).eq("kind", "summary")
+    .order("updated_at", { ascending: false });
+  const rows = (data as Array<{ id: string; body_en: string; body_ko: string }>) ?? [];
+  const living = rows.find((r) => r.id === `${slug}/bible`) ?? rows[0];
+  return living ? docBody(living, lang) : "";
+}
+
+export async function revisionContext(db: SupabaseClient, subject: Subject, session: Session): Promise<RevisionContext> {
+  const lang = subject.language;
+  const [chapters, bible] = await Promise.all([bookChapters(db, subject.story_slug), currentBible(db, subject.story_slug, lang)]);
+  const target = session.target_doc ? chapters.find((c) => c.id === session.target_doc) : undefined;
+  return {
+    bible,
+    chapterTitle: target ? docTitle(target, lang) : null,
+    chapter: target ? docBody(target, lang) : null,
+    chapterList: chapters.map((c) => docTitle(c, lang)),
+  };
 }

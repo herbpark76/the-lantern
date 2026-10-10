@@ -31,6 +31,8 @@ export type StorySettings = {
   accent_color: string;
   narration?: NarrationSettings;
   chapters?: ChapterDef[];
+  /** "book" = a linear book published from Studio > Book (read at /book/<slug>). */
+  kind?: "book";
 };
 
 export type StoryStatus = "draft" | "published";

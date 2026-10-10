@@ -29,7 +29,8 @@ export function StudioPage() {
   useEffect(() => {
     if (!isAuthor) { setLoading(false); return; }
     supabase.from("stories").select("*").order("title").then(({ data }) => {
-      setStories((data as Story[]) ?? []);
+      // Published books live under the Book tab, not with the interactive stories.
+      setStories(((data as Story[]) ?? []).filter((s) => s.settings?.kind !== "book"));
       setLoading(false);
     });
   }, [isAuthor]);
@@ -126,7 +127,7 @@ export function StudioPage() {
 
       {tab === "stories" && <StoriesTab stories={stories} onStoriesChanged={() => {
         supabase.from("stories").select("*").order("title").then(({ data }) => {
-          setStories((data as Story[]) ?? []);
+          setStories(((data as Story[]) ?? []).filter((s) => s.settings?.kind !== "book"));
         });
       }} />}
       {tab === "map" && selectedSlug && <MapTab slug={selectedSlug} />}
