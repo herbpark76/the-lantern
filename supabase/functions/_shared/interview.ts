@@ -355,19 +355,30 @@ export async function textToSpeech(subject: Subject, text: string): Promise<Arra
 
 export async function speechToText(file: Blob, filename: string, language: string): Promise<string> {
   if (!ELEVENLABS_API_KEY) throw new Error("ELEVENLABS_API_KEY is not configured");
-  const form = new FormData();
-  form.append("model_id", Deno.env.get("ELEVENLABS_STT_MODEL") ?? "scribe_v2");
-  form.append("language_code", language || "ko");
-  form.append("tag_audio_events", "false");
-  form.append("file", file, filename);
-  const resp = await fetch("https://api.elevenlabs.io/v1/speech-to-text", {
-    method: "POST",
-    headers: { "xi-api-key": ELEVENLABS_API_KEY },
-    body: form,
-  });
+  const send = (model: string) => {
+    const form = new FormData();
+    form.append("model_id", model);
+    form.append("language_code", language || "ko");
+    form.append("tag_audio_events", "false");
+    form.append("file", file, filename);
+    return fetch("https://api.elevenlabs.io/v1/speech-to-text", {
+      method: "POST",
+      headers: { "xi-api-key": ELEVENLABS_API_KEY },
+      body: form,
+    });
+  };
+  const primary = Deno.env.get("ELEVENLABS_STT_MODEL") ?? "scribe_v2";
+  let resp = await send(primary);
+  if (!resp.ok && (resp.status === 400 || resp.status === 422) && primary !== "scribe_v1") {
+    console.warn("[interview] STT model rejected, retrying with scribe_v1:", resp.status, await resp.text());
+    resp = await send("scribe_v1");
+  }
   if (!resp.ok) {
-    console.error("[interview] STT error", resp.status, await resp.text());
-    throw new Error(`STT error ${resp.status}`);
+    const body = await resp.text();
+    console.error("[interview] STT error", resp.status, body);
+    let reason = body;
+    try { reason = JSON.parse(body)?.detail?.message ?? body; } catch { /* keep raw */ }
+    throw new Error(`Speech-to-text ${resp.status}: ${String(reason).slice(0, 160)}`);
   }
   const data = await resp.json() as { text?: string };
   return (data.text ?? "").trim();

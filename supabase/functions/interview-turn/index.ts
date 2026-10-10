@@ -315,6 +315,6 @@ Deno.serve(async (req: Request) => {
     return jsonError(400, `Unknown action: ${action}`);
   } catch (err) {
     console.error("[interview-turn] error", err);
-    return jsonError(500, MSG.busy, "server");
+    return json({ error: MSG.busy, code: "server", detail: String((err as Error)?.message ?? err).slice(0, 220) }, 500);
   }
 });

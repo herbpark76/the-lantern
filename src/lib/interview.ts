@@ -102,10 +102,12 @@ export function eraLabel(key: string): string {
 export class InterviewError extends Error {
   code?: string;
   status?: number;
-  constructor(message: string, code?: string, status?: number) {
+  detail?: string;
+  constructor(message: string, code?: string, status?: number, detail?: string) {
     super(message);
     this.code = code;
     this.status = status;
+    this.detail = detail;
   }
 }
 
@@ -115,6 +117,7 @@ async function invoke<T>(fn: string, body: Record<string, unknown> | FormData): 
     let message = "잠깐 문제가 생겼어요. 조금 있다가 다시 눌러 주세요.";
     let code: string | undefined;
     let status: number | undefined;
+    let detail: string | undefined;
     const ctx = (error as { context?: Response }).context;
     if (ctx && typeof ctx.json === "function") {
       status = ctx.status;
@@ -122,9 +125,10 @@ async function invoke<T>(fn: string, body: Record<string, unknown> | FormData): 
         const payload = await ctx.json();
         if (payload?.error) message = payload.error;
         code = payload?.code;
+        detail = payload?.detail;
       } catch { /* keep default */ }
     }
-    throw new InterviewError(message, code, status);
+    throw new InterviewError(message, code, status, detail);
   }
   return data as T;
 }

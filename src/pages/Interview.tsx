@@ -27,6 +27,12 @@ export function InterviewPage() {
   const [herText, setHerText] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
+  const showError = (e: unknown) => {
+    const err = e as InterviewError;
+    setError(err.message);
+    setErrorDetail(err.detail ?? null);
+  };
   const [noSubject, setNoSubject] = useState(false);
   const [needsTapToPlay, setNeedsTapToPlay] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
@@ -127,7 +133,7 @@ export function InterviewPage() {
     a.src = SILENT_WAV;
     a.play().catch(() => {});
     acquireWakeLock();
-    setError(null);
+    setError(null); setErrorDetail(null);
     setPhase("thinking");
     try {
       const s = await interviewApi.start();
@@ -136,7 +142,7 @@ export function InterviewPage() {
       setHerText(s.last_answer);
       playQuestion(s.question);
     } catch (e) {
-      setError((e as InterviewError).message);
+      showError(e);
       setPhase("welcome");
     }
   };
@@ -155,7 +161,7 @@ export function InterviewPage() {
   const startRecording = async () => {
     stopAudio();
     setNotice(null);
-    setError(null);
+    setError(null); setErrorDetail(null);
     setNeedsTapToPlay(false);
     try {
       // Grab the mic only while recording, so iPhone playback stays on the loudspeaker.
@@ -211,7 +217,7 @@ export function InterviewPage() {
       if (r.question) { setQuestion(r.question); playQuestion(r.question); }
       else setPhase("ready");
     } catch (e) {
-      setError((e as InterviewError).message);
+      showError(e);
       setPhase("ready");
     }
   };
@@ -221,7 +227,7 @@ export function InterviewPage() {
     const text = typedText.trim();
     if (!text) return;
     setPhase("thinking");
-    setError(null);
+    setError(null); setErrorDetail(null);
     try {
       const r = await interviewApi.answerText(text);
       setTypedText("");
@@ -230,7 +236,7 @@ export function InterviewPage() {
       if (r.question) { setQuestion(r.question); playQuestion(r.question); }
       else setPhase("ready");
     } catch (e) {
-      setError((e as InterviewError).message);
+      showError(e);
       setPhase("ready");
     }
   };
@@ -238,7 +244,7 @@ export function InterviewPage() {
   const handleSkip = async () => {
     stopAudio();
     setPhase("thinking");
-    setError(null);
+    setError(null); setErrorDetail(null);
     setNotice(null);
     try {
       const r = await interviewApi.skip();
@@ -246,7 +252,7 @@ export function InterviewPage() {
       if (r.question) { setQuestion(r.question); playQuestion(r.question); }
       else setPhase("ready");
     } catch (e) {
-      setError((e as InterviewError).message);
+      showError(e);
       setPhase("ready");
     }
   };
@@ -254,7 +260,7 @@ export function InterviewPage() {
   const handleRedo = async () => {
     stopAudio();
     setPhase("thinking");
-    setError(null);
+    setError(null); setErrorDetail(null);
     try {
       const s = await interviewApi.redo();
       setHerText(null);
@@ -262,7 +268,7 @@ export function InterviewPage() {
       setNotice("다시 말씀해 주세요.");
       setPhase("ready");
     } catch (e) {
-      setError((e as InterviewError).message);
+      showError(e);
       setPhase("ready");
     }
   };
@@ -284,7 +290,7 @@ export function InterviewPage() {
       wakeLockRef.current?.release().catch(() => {});
       wakeLockRef.current = null;
     } catch (e) {
-      setError((e as InterviewError).message);
+      showError(e);
       setPhase("ready");
     }
   };
@@ -401,6 +407,7 @@ export function InterviewPage() {
       <div className="min-h-[2rem] text-center">
         {notice && <p className="text-xl text-[#b0642e]">{notice}</p>}
         {error && <p className="text-xl text-[#b04a4a]">{error}</p>}
+        {error && errorDetail && <p className="text-xs text-[#a89f8e] mt-1 break-all">{errorDetail}</p>}
         {thinking && <p className="text-xl text-[#7a7160] flex items-center justify-center gap-2"><Loader2 size={22} className="animate-spin" /> 듣고 있어요…</p>}
         {speaking && <p className="text-xl text-[#7a7160]">질문하는 중…</p>}
       </div>
