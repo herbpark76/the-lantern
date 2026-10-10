@@ -10,12 +10,22 @@ import {
 
 const TRANSLATE_SYSTEM = `You translate Korean interview transcripts into English for a novelist. The speaker is an elderly Korean woman from Daegu speaking in Gyeongsang dialect, transcribed by speech-to-text (expect small transcription errors; translate the evident meaning). Translate faithfully and completely, line by line, keeping each "Interviewer:" / speaker label. Preserve her voice, idioms and tone; when a Korean word or phrase carries meaning that English loses (dialect, food, kinship terms, sayings), keep it in romanized Korean with a short gloss in brackets. Output only the translation.`;
 
-const NOTES_SYSTEM = `You help a novelist turn interview sessions with his mother into material for a family-saga novel (in the spirit of Toji, Pachinko, Ode to My Father). You receive a Korean transcript of one session (speech-to-text, may contain small errors) plus notes from earlier sessions. Write in English. Be faithful: never invent facts; mark anything uncertain with "(unclear)".
+const NOTES_SYSTEM = `You help a novelist turn interview sessions with his mother into material for a family-saga novel (in the spirit of Toji, Pachinko, Ode to My Father). You receive a Korean transcript of one session (speech-to-text, may contain small errors) plus notes from earlier sessions. Be faithful: never invent facts; mark anything uncertain with "(unclear)".
 
-Return ONLY a JSON object with these string fields:
-- "summary": a concise factual summary of what she told us this session — people (with relationships), places, years/ages, events — as markdown bullet points.
-- "scene_notes": vivid material for scenes as markdown bullets: sensory details, objects, food, weather, gestures, and her own memorable phrasings quoted in Korean with English in brackets.
-- "followups": 3–8 specific follow-up questions for next time, as markdown bullets, each in Korean (gentle 존댓말) followed by English in brackets. Note any topics she seemed reluctant about so they can be handled with care.`;
+Answer with exactly these four sections, each wrapped in its tag, and nothing else:
+
+<summary>
+English. A concise factual summary of what she told us this session — people (with relationships), places, years/ages, events — as markdown bullet points.
+</summary>
+<scene_notes>
+English. Vivid material for scenes as markdown bullets: sensory details, objects, food, weather, gestures, and her own memorable phrasings quoted in Korean with English in brackets.
+</scene_notes>
+<followups>
+3–8 specific follow-up questions for next time, as markdown bullets, each in Korean (gentle 존댓말) followed by English in brackets. Note any topics she seemed reluctant about so they can be handled with care.
+</followups>
+<summary_ko>
+Korean, written for her to read herself: a warm, short summary (5–10 bullet points, gentle 존댓말, simple words) of what she shared today, so she can check it and correct anything — e.g. "• 토지를 태백산맥보다 조금 더 좋아하신다고 하셨어요." No analysis, no English.
+</summary_ko>`;
 
 function b64utf8(s: string): string {
   const bytes = new TextEncoder().encode(s);
@@ -24,11 +34,14 @@ function b64utf8(s: string): string {
   return btoa(bin);
 }
 
-function parseJsonObject(text: string): Record<string, string> {
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start < 0 || end < start) throw new Error("No JSON in response");
-  return JSON.parse(text.slice(start, end + 1));
+function parseSections(text: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const tag of ["summary", "scene_notes", "followups", "summary_ko"]) {
+    const m = text.match(new RegExp(`<${tag}>([\\s\\S]*?)(?:</${tag}>|$)`));
+    if (m) out[tag] = m[1].trim();
+  }
+  if (!out.summary) out.summary = text.trim();
+  return out;
 }
 
 async function commitToGitHub(path: string, content: string, message: string): Promise<void> {
@@ -99,12 +112,10 @@ Deno.serve(async (req: Request) => {
       callClaude(NOTES_SYSTEM, [{
         role: "user",
         content: `Earlier sessions:\n${earlier}\n\nThis session (#${session.session_no}, topic: ${ERAS[session.era]?.label ?? session.era}):\n\n${transcriptKo}`,
-      }], 4000),
+      }], 8000),
     ]);
 
-    let parsed: Record<string, string>;
-    try { parsed = parseJsonObject(notes.text); }
-    catch { parsed = { summary: notes.text, scene_notes: "", followups: "" }; }
+    const parsed = parseSections(notes.text);
 
     const input_tokens = session.input_tokens + translation.input_tokens + notes.input_tokens;
     const output_tokens = session.output_tokens + translation.output_tokens + notes.output_tokens;
@@ -117,6 +128,7 @@ Deno.serve(async (req: Request) => {
       summary_en: parsed.summary ?? "",
       scene_notes: parsed.scene_notes ?? "",
       followups: parsed.followups ?? "",
+      summary_ko: parsed.summary_ko ?? "",
       input_tokens,
       output_tokens,
       est_cost_usd: estimateCost(input_tokens, output_tokens),
@@ -138,6 +150,9 @@ Deno.serve(async (req: Request) => {
 
 ## Summary
 ${update.summary_en}
+
+## 요약 (for her to read)
+${update.summary_ko}
 
 ## Scene notes
 ${update.scene_notes}

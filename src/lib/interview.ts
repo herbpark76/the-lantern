@@ -32,6 +32,7 @@ export interface InterviewSession {
   transcript_ko: string | null;
   transcript_en: string | null;
   summary_en: string | null;
+  summary_ko: string | null;
   scene_notes: string | null;
   followups: string | null;
   github_path: string | null;

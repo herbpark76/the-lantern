@@ -344,6 +344,7 @@ function SessionDetail({ session, subject, onBack, onChanged }: {
           <NotesCard title="Follow-ups" text={session.followups} />
         </div>
       )}
+      {session.summary_ko && <NotesCard title="요약 · Korean summary for her to read" text={session.summary_ko} />}
 
       <div className="flex gap-1 border-b border-ink-200 dark:border-ink-800">
         {(["conversation", "english"] as const).map((v) => (
