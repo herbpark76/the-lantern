@@ -61,6 +61,7 @@ const STR = {
     wait: "잠시만요…",
     enter: "들어가기",
     choose: "어떤 이야기를 할까요? · Which story?",
+    away: (play: boolean) => `다른 화면에 다녀오셨네요. 하신 말씀은 저장됐어요. ${play ? "준비되시면 질문을 들어 보세요." : "준비되시면 말하기를 눌러 주세요."}`,
     pause: "잠깐 쉬기",
     paused: "잠깐 쉬어요. 준비되시면 말하기를 눌러 주세요.",
   },
@@ -116,6 +117,7 @@ const STR = {
     wait: "One moment…",
     enter: "Sign in",
     choose: "Which story? · 어떤 이야기를 할까요?",
+    away: (play: boolean) => `You stepped away, so I stopped listening. What you said was saved. ${play ? "Tap Play question" : "Tap Speak"} when you're ready.`,
     pause: "Pause",
     paused: "Paused. Tap Speak when you're ready.",
   },
@@ -184,13 +186,18 @@ export function InterviewPage({ slug }: { slug?: string }) {
   const vadTimerRef = useRef<number | null>(null);
   const discardRef = useRef(false);
   const pausedRef = useRef<"pause" | "end" | null>(null);
+  const [away, setAway] = useState(false);
   // Always call the latest version of these from audio callbacks.
   const afterQuestionRef = useRef<() => void>(() => {});
 
   // ── Load state ──
+  // Keyed on the user id, not the session object: the sign-in token refreshes whenever the
+  // window regains focus, and reloading then would throw away an interview in progress.
+  const userId = authSession?.user.id ?? null;
   useEffect(() => {
     if (authLoading) return;
-    if (!authSession) { setPhase("welcome"); return; }
+    if (!userId) { setPhase("welcome"); return; }
+    if (phaseRef.current !== "loading" && phaseRef.current !== "welcome") return;
     interviewApi.state()
       .then((s) => {
         if (s.choose) { setChoices(s.choose); setPhase("welcome"); return; }
@@ -203,7 +210,7 @@ export function InterviewPage({ slug }: { slug?: string }) {
         else setError(e.message);
         setPhase("welcome");
       });
-  }, [authLoading, authSession, slug]);
+  }, [authLoading, userId, slug]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // If loading takes too long, offer a way out instead of spinning forever.
   useEffect(() => {
@@ -248,6 +255,14 @@ export function InterviewPage({ slug }: { slug?: string }) {
 
   useEffect(() => {
     const onVisible = () => {
+      // Leaving the page (another app, a locked phone) ends the answer and keeps it: it is
+      // sent as usual, and the next question waits until they're back.
+      if (document.visibilityState === "hidden" && phaseRef.current === "recording") {
+        setAway(true);
+        stopVad();
+        stopRecording();
+        return;
+      }
       if (document.visibilityState === "visible" && phaseRef.current !== "welcome" && phaseRef.current !== "finished") {
         wakeLockRef.current = null;
         acquireWakeLock();
@@ -273,6 +288,8 @@ export function InterviewPage({ slug }: { slug?: string }) {
 
   const playQuestion = useCallback((q: Question | null) => {
     setNeedsTapToPlay(false);
+    // Not looking at the page: hold the question until they come back and tap to hear it.
+    if (document.hidden) { setAway(true); setNeedsTapToPlay(!!q?.audio_url); setPhase("ready"); return; }
     if (!q?.audio_url) { afterQuestionRef.current(); return; }
     const a = getAudio();
     a.onended = () => { if (phaseRef.current === "speaking") afterQuestionRef.current(); };
@@ -385,6 +402,7 @@ export function InterviewPage({ slug }: { slug?: string }) {
   };
 
   const startRecording = async () => {
+    setAway(false);
     stopAudio();
     setNotice(null);
     setError(null); setErrorDetail(null);
@@ -549,6 +567,7 @@ export function InterviewPage({ slug }: { slug?: string }) {
   };
 
   afterQuestionRef.current = () => {
+    if (document.hidden) { setAway(true); setPhase("ready"); return; }
     if (autoListenRef.current && !typing) startRecording();
     else setPhase("ready");
   };
@@ -571,6 +590,7 @@ export function InterviewPage({ slug }: { slug?: string }) {
 
   const replay = () => {
     if (!question?.audio_url) return;
+    setAway(false);
     const a = getAudio();
     a.onended = () => { if (phaseRef.current === "speaking") afterQuestionRef.current(); };
     a.src = question.audio_url;
@@ -707,7 +727,7 @@ export function InterviewPage({ slug }: { slug?: string }) {
                 ? (state.session.target_doc
                     ? "The revised chapter and updated bible take a few minutes. The previous version is kept."
                     : "The updated story bible takes a minute or two.")
-                : "The updated story bible and the next chapter take a few minutes."}
+                : "The story bible will be updated in a minute or two. When you're ready, use Create next chapter in Studio → Book."}
               {" "}They'll show up in <a href="/studio" className="underline underline-offset-4">Studio → Book</a>.
             </p>
           )}
@@ -756,6 +776,7 @@ export function InterviewPage({ slug }: { slug?: string }) {
 
       {/* Status / errors */}
       <div className="min-h-[2rem] text-center">
+        {away && !notice && phase === "ready" && <p className="text-xl text-[#b0642e]">{T.away(needsTapToPlay)}</p>}
         {notice && <p className="text-xl text-[#b0642e]">{notice}</p>}
         {error && <p className="text-xl text-[#b04a4a]">{error}</p>}
         {error && errorDetail && <p className="text-xs text-[#a89f8e] mt-1 break-all">{errorDetail}</p>}

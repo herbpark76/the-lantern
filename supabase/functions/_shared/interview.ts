@@ -227,7 +227,7 @@ export function strings(subject: Subject, session?: Pick<Session, "kind"> | null
     closing: revise
       ? "(They're finishing. Don't ask a question. In one or two short sentences, thank them and say you'll update the story bible with their notes and write a revised version of the chapter, keeping the previous version, and it'll be ready in Studio under Book in a few minutes. If this session had no chapter, say only that you'll update the story bible.)"
       : ghost
-      ? "(They're finishing for now. Don't ask a question. In one or two short sentences, thank them and say you'll now write up the story bible, outline and an opening chapter, which will be ready in Studio under Book in a few minutes.)"
+      ? "(They're finishing for now. Don't ask a question. In one or two short sentences, thank them and say you'll fold today's ideas into the story bible, and when they're ready they can create the next chapter from Studio under Book.)"
       : en
         ? "(They'd like to stop for today. Don't ask a question. In one or two sentences, warmly thank them for what they shared and say you look forward to next time.)"
         : `(${name}께서 오늘은 여기까지 하자고 하셨습니다. 질문은 하지 말고, 오늘 들려주신 이야기에 따뜻하게 감사드리고, 다음에 또 이야기 나누자고 한두 문장으로 짧게 인사해 주세요.)`,
@@ -236,7 +236,7 @@ export function strings(subject: Subject, session?: Pick<Session, "kind"> | null
 
 // ── Ghostwriter prompt ───────────────────────────────────────────────────
 
-export function ghostwriterSystemPrompt(subject: Subject, session: Session, earlier: Session[]): string {
+export function ghostwriterSystemPrompt(subject: Subject, session: Session, earlier: Session[], book?: RevisionContext | null): string {
   const name = subject.honorific || subject.display_name;
   const earlierText = earlier.length
     ? earlier.map((s) => `Session ${s.session_no}:\n${s.summary_en ?? "(no notes)"}${s.followups ? `\nOpen questions left: ${s.followups}` : ""}`).join("\n\n")
@@ -263,9 +263,12 @@ export function ghostwriterSystemPrompt(subject: Subject, session: Session, earl
 8. How it ends, or what they want the reader to feel at the end.
 9. Title ideas.
 Follow their energy and dig into anything vivid, but keep track of what's still missing and steer there.
-
+${book?.chaptersText ? `
+# You have read the book so far
+The chapters written so far are below, and you know them well. When chapters exist, this interview is mostly about what happens NEXT: where the story goes in the coming chapters, what the author wants to see, and anything to deepen. Refer to specific moments, characters and lines from the chapters (quote at most a few words). Don't re-ask what the bible or the chapters already settle.
+` : ""}
 # When you have enough
-When you have enough for a strong story bible, a three-act outline and an opening chapter (usually after 15–25 answers, sooner if they are detailed), say so in one or two sentences: they can tap Finish to have it written now, or keep going to add more. If they ask you to write it, tell them to tap Finish.
+When you have enough to update the story bible with real substance (usually after 10–25 answers, sooner if they are detailed), say so in one or two sentences: they can tap Finish to have the bible updated, then create the next chapter from Studio under Book, or keep going to add more. If they ask you to write a chapter, tell them to tap Finish and then use "Create next chapter" in Studio.
 
 # Notes from the author for you
 ${subject.interviewer_notes?.trim() || "(none)"}
@@ -279,6 +282,12 @@ ${earlierText}
 # Background
 ${subject.background?.trim() || "(none)"}
 
+# Story bible (current)
+${book?.bible?.trim() || "(none yet)"}
+
+# The book so far
+${book?.chaptersText || "(no chapters written yet)"}
+
 This is session ${session.session_no}.`;
 }
 
@@ -287,12 +296,14 @@ export interface RevisionContext {
   chapterTitle: string | null;
   chapter: string | null;
   chapterList: string[];
+  /** The chapters written so far (full text of the most recent ones), excluding the one under review. */
+  chaptersText: string;
 }
 
 export function systemPromptFor(subject: Subject, session: Session, earlier: Session[], rev?: RevisionContext | null): string {
   if (subject.mode === "ghostwriter" && session.kind === "revise") return revisionSystemPrompt(subject, session, rev ?? null);
   return subject.mode === "ghostwriter"
-    ? ghostwriterSystemPrompt(subject, session, earlier)
+    ? ghostwriterSystemPrompt(subject, session, earlier, rev)
     : interviewerSystemPrompt(subject, session, earlier);
 }
 
@@ -322,6 +333,7 @@ ${rev?.bible?.trim() || "(no bible yet)"}
 
 # Chapters written so far
 ${rev?.chapterList.length ? rev.chapterList.map((t) => `- ${t}`).join("\n") : "(none)"}
+${rev?.chaptersText ? `\n# The rest of the book (for context and continuity)\n\n${rev.chaptersText}` : ""}
 ${rev?.chapter ? `\n# The chapter under review: ${rev.chapterTitle}\n\n${rev.chapter}` : ""}
 
 # Notes from the author for you
@@ -592,6 +604,25 @@ export async function currentBible(db: SupabaseClient, slug: string, lang: strin
   return living ? docBody(living, lang) : "";
 }
 
+/**
+ * The chapters as prompt text, oldest first. The most recent chapters are given in full;
+ * when the book outgrows the budget, earlier ones are listed by title only.
+ */
+export function chaptersForPrompt(chapters: ChapterRow[], lang: string, maxChars = 160_000): string {
+  const written = chapters.filter((c) => docBody(c, lang).trim()).sort((a, b) => a.position - b.position);
+  const full: string[] = [];
+  let used = 0;
+  let cut = -1;
+  for (let i = written.length - 1; i >= 0; i--) {
+    const body = docBody(written[i], lang).trim();
+    if (used + body.length > maxChars && full.length) { cut = i; break; }
+    full.unshift(body);
+    used += body.length;
+  }
+  const titlesOnly = cut >= 0 ? written.slice(0, cut + 1).map((c) => `- ${docTitle(c, lang)} (full text omitted for length)`).join("\n") + "\n\n" : "";
+  return titlesOnly + full.join("\n\n---\n\n");
+}
+
 export async function revisionContext(db: SupabaseClient, subject: Subject, session: Session): Promise<RevisionContext> {
   const lang = subject.language;
   const [chapters, bible] = await Promise.all([bookChapters(db, subject.story_slug), currentBible(db, subject.story_slug, lang)]);
@@ -600,6 +631,7 @@ export async function revisionContext(db: SupabaseClient, subject: Subject, sess
     bible,
     chapterTitle: target ? docTitle(target, lang) : null,
     chapter: target ? docBody(target, lang) : null,
-    chapterList: chapters.map((c) => docTitle(c, lang)),
+    chapterList: chapters.filter((c) => docBody(c, lang).trim()).map((c) => docTitle(c, lang)),
+    chaptersText: chaptersForPrompt(chapters.filter((c) => c.id !== target?.id), lang),
   };
 }

@@ -4,7 +4,7 @@
 // and commits a markdown file to GitHub at interviews/<story_slug>/session-NN.md.
 
 import {
-  admin, bookChapters, callClaude, corsHeaders, currentBible, docBody, docTitle, ERAS, estimateCost, getCaller, GITHUB_REPO, GITHUB_TOKEN,
+  admin, bookChapters, callClaude, chaptersForPrompt, corsHeaders, currentBible, docBody, docTitle, ERAS, estimateCost, getCaller, GITHUB_REPO, GITHUB_TOKEN,
   isStaffUser, json, jsonError, SERVICE_ROLE_KEY, type Session, type Subject, type Turn,
 } from "../_shared/interview.ts";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.57.4";
@@ -86,7 +86,7 @@ function chapterSystem(subject: Subject, n: number): string {
   const task = n === 1
     ? "write the opening chapter of their story. Start in scene with a strong hook, establish the protagonist's voice and desire, and end the chapter on a turn that pulls the reader on."
     : `write Chapter ${n} of their story. Pick up where the previous chapter (given below) left off, follow the outline's next beats, keep continuity of names, facts and voice, and end on a turn that pulls the reader on.`;
-  return `You are a skilled novelist ghostwriting a book for ${who}. From the interview transcript, the story bible and earlier notes, ${task} About 2,500–3,500 words, in ${lang}, in the genre, tone and point of view they described. Let the craft of the authors they love inform yours (pacing, wit, texture), but never imitate or quote their text. Where details were left open, choose well and stay consistent with everything they said.
+  return `You are a skilled novelist ghostwriting a book for ${who}. From the story bible (which captures everything the author has told you, including their standing notes) and the chapters written so far, ${task} About 2,500–3,500 words, in ${lang}, in the genre, tone and point of view they described. Let the craft of the authors they love inform yours (pacing, wit, texture), but never imitate or quote their text. Where details were left open, choose well and stay consistent with everything they said.
 
 Output only the chapter in markdown: first line "# Chapter ${n}: <title>", then paragraphs. Use "### 1", "### 2" lines only for section breaks. No other headings, no notes.`;
 }
@@ -172,20 +172,14 @@ async function saveChapter(db: SupabaseClient, subject: Subject, id: string, n: 
   if (error) console.error("[interview-finish] chapter upsert failed", error.message);
 }
 
-// Interview session: update the living bible and write the next chapter.
+// Interview session: fold what was said into the living bible. Chapters are written on demand
+// from Studio > Book ("Create next chapter"), see writeChapter below.
 async function finishGhostwriter(
   db: SupabaseClient, subject: Subject, session: Session, turns: Turn[], skipGithub: boolean,
 ): Promise<Response> {
   const lang = subject.language;
   const transcript = transcriptOf(subject, turns, "Ghostwriter");
   const chapters = await bookChapters(db, subject.story_slug);
-
-  // Which chapter this session writes: the one it wrote before (regenerate), else the next one.
-  let target = session.target_doc ? chapters.find((c) => c.id === session.target_doc) : undefined;
-  if (!target && session.session_no === 1) target = chapters.find((c) => c.id === `${subject.story_slug}/sample-01`);
-  const n = target?.position ?? ((chapters.reduce((m, c) => Math.max(m, c.position), 0)) + 1);
-  const chapterId = target?.id ?? `${subject.story_slug}/sample-${nn(n)}`;
-  const previous = [...chapters].filter((c) => c.position < n).sort((a, b) => b.position - a.position)[0];
 
   const { data: earlierRows } = await db
     .from("interview_sessions").select("session_no, kind, summary_en, followups")
@@ -194,27 +188,22 @@ async function finishGhostwriter(
     .map((s) => `Session ${s.session_no}${s.kind === "revise" ? " (author's notes)" : ""}:\n${s.summary_en ?? ""}`)
     .join("\n\n---\n\n") || "(none — this is the first session)";
   const bible = await currentBible(db, subject.story_slug, lang);
+  const book = chaptersForPrompt(chapters, lang, 120_000);
 
   const input = [
     `Current story bible:\n${bible || "(none yet)"}`,
+    `The book so far:\n${book || "(no chapters yet)"}`,
     `Earlier sessions:\n${earlier}`,
     `This session (#${session.session_no}) transcript:\n\n${transcript}`,
   ].join("\n\n=====\n\n");
-  const chapterInput = previous ? `${input}\n\n=====\n\nPrevious chapter:\n\n${docBody(previous, lang)}` : input;
 
-  const [notes, chapter] = await Promise.all([
-    callClaude(GW_NOTES_SYSTEM, [{ role: "user", content: input }], 8000),
-    callClaude(chapterSystem(subject, n), [{ role: "user", content: chapterInput }], 12000),
-  ]);
+  const notes = await callClaude(GW_NOTES_SYSTEM, [{ role: "user", content: input }], 10000);
   const parsed = parseSections(notes.text, ["bible", "outline", "open_questions"]);
-  const chapterMd = chapterHeading(chapter.text, n);
   const bibleMd = composeBible(parsed.bible ?? "", parsed.outline ?? "", parsed.open_questions ?? "");
-
   await saveBible(db, subject, bibleMd, `Before session ${session.session_no}`);
-  await saveChapter(db, subject, chapterId, n, chapterMd, `Before session ${session.session_no} rewrite`);
 
-  const input_tokens = session.input_tokens + notes.input_tokens + chapter.input_tokens;
-  const output_tokens = session.output_tokens + notes.output_tokens + chapter.output_tokens;
+  const input_tokens = session.input_tokens + notes.input_tokens;
+  const output_tokens = session.output_tokens + notes.output_tokens;
   const update: Record<string, unknown> = {
     status: "finished",
     ended_at: session.ended_at ?? new Date().toISOString(),
@@ -223,7 +212,6 @@ async function finishGhostwriter(
     summary_en: parsed.bible ?? "",
     scene_notes: parsed.outline ?? "",
     followups: parsed.open_questions ?? "",
-    target_doc: chapterId,
     input_tokens,
     output_tokens,
     est_cost_usd: estimateCost(input_tokens, output_tokens),
@@ -232,7 +220,7 @@ async function finishGhostwriter(
 
   if (!skipGithub) {
     const path = `interviews/${subject.story_slug}/${personFolder(subject)}/session-${nn(session.session_no)}.md`;
-    const md = `${bibleMd}\n\n---\n\n${chapterMd}\n\n---\n\n## Transcript\n\n${transcript}\n`;
+    const md = `${bibleMd}\n\n---\n\n## Transcript\n\n${transcript}\n`;
     try {
       await commitToGitHub(path, md, `Ghostwriter session ${nn(session.session_no)} (${subject.story_slug})`);
       update.github_path = path;
@@ -242,7 +230,46 @@ async function finishGhostwriter(
   }
 
   await db.from("interview_sessions").update(update).eq("id", session.id);
-  return json({ ok: true, github_path: update.github_path ?? null, github_error: update.github_error ?? null, book: true, chapter: chapterId });
+  return json({ ok: true, github_path: update.github_path ?? null, github_error: update.github_error ?? null, book: true });
+}
+
+// "Create next chapter" (or "Try again"): write chapter chapterId from the bible and the chapters
+// before it. interview-admin creates the placeholder row (generating = true) and calls this.
+async function writeChapter(db: SupabaseClient, chapterId: string): Promise<Response> {
+  const { data: docRow } = await db.from("book_docs").select("id, story_slug, position").eq("id", chapterId).maybeSingle();
+  const doc = docRow as { id: string; story_slug: string; position: number } | null;
+  if (!doc) return jsonError(404, "Chapter not found");
+  const { data: subjRow } = await db.from("interview_subjects").select("*")
+    .eq("story_slug", doc.story_slug).eq("mode", "ghostwriter").order("created_at").limit(1).maybeSingle();
+  const subject = subjRow as Subject | null;
+  if (!subject) {
+    await db.from("book_docs").update({ generating: false, gen_error: "No ghostwriter interview for this book" }).eq("id", chapterId);
+    return jsonError(404, "No ghostwriter interview for this book");
+  }
+  const lang = subject.language;
+  try {
+    const chapters = await bookChapters(db, doc.story_slug);
+    const before = chapters.filter((c) => c.position < doc.position);
+    const bible = await currentBible(db, doc.story_slug, lang);
+    const input = [
+      `Story bible (including the outline and the author's standing notes):\n${bible || "(none yet)"}`,
+      before.length ? `The book so far:\n\n${chaptersForPrompt(before, lang, 160_000)}` : "No chapters yet: this is the opening chapter.",
+    ].join("\n\n=====\n\n");
+    const chapter = await callClaude(chapterSystem(subject, doc.position), [{ role: "user", content: input }], 12000);
+    const md = chapterHeading(chapter.text, doc.position);
+    await saveChapter(db, subject, chapterId, doc.position, md, "Before rewrite");
+    await db.from("book_docs").update({ generating: false, gen_error: null }).eq("id", chapterId);
+    try {
+      await commitToGitHub(`interviews/${doc.story_slug}/chapters/chapter-${nn(doc.position)}.md`, `${md}\n`, `Chapter ${doc.position} (${doc.story_slug})`);
+    } catch (e) {
+      console.error("[interview-finish] chapter GitHub commit failed", e);
+    }
+    return json({ ok: true, chapter: chapterId });
+  } catch (e) {
+    const msg = String((e as Error).message ?? e).slice(0, 300);
+    await db.from("book_docs").update({ generating: false, gen_error: msg }).eq("id", chapterId);
+    return jsonError(500, msg);
+  }
 }
 
 // Notes session: fold the author's notes into the bible and rewrite the chapter (old one kept).
@@ -318,7 +345,14 @@ Deno.serve(async (req: Request) => {
 
   try {
     const db = admin();
-    const { session_id, skip_github } = await req.json().catch(() => ({}));
+    const { session_id, skip_github, action, chapter_id } = await req.json().catch(() => ({}));
+
+    // Background chapter writing, started by interview-admin (service role only).
+    if (action === "write_chapter") {
+      const bearer = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
+      if (bearer !== SERVICE_ROLE_KEY) return jsonError(403, "Forbidden");
+      return await writeChapter(db, String(chapter_id ?? ""));
+    }
     if (!session_id) return jsonError(400, "session_id required");
 
     const { data: sessionRow } = await db.from("interview_sessions").select("*").eq("id", session_id).maybeSingle();

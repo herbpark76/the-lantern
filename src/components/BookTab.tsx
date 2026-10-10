@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BookOpen, ChevronLeft, ChevronRight, FileText, Globe, Headphones, History, Loader2, MessageSquare, Mic, Pause, Play,
-  RefreshCw, SkipBack, SkipForward,
+  RefreshCw, SkipBack, SkipForward, Sparkles,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { InterviewError, interviewApi, TTS_MODELS } from "@/lib/interview";
@@ -25,6 +25,8 @@ export interface BookDoc {
   voice_ko: string;
   model_id?: string;
   final_model_id?: string;
+  generating?: boolean;
+  gen_error?: string | null;
   published?: boolean;
   updated_at: string;
 }
@@ -83,6 +85,7 @@ export function BookTab() {
   const [story, setStory] = useState<StoryRow | null>(null);
   const [showPublish, setShowPublish] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [writing, setWriting] = useState(false);
   const [lang, setLang] = useState<Lang>(() => {
     try { return (localStorage.getItem("book-lang") as Lang) || "ko"; } catch { return "ko"; }
   });
@@ -96,6 +99,13 @@ export function BookTab() {
   }, []);
 
   useEffect(() => { loadDocs(); }, [loadDocs]);
+  // While a chapter is being written, check back every few seconds.
+  const anyGenerating = docs.some((d) => d.generating);
+  useEffect(() => {
+    if (!anyGenerating) return;
+    const t = window.setInterval(loadDocs, 8000);
+    return () => window.clearInterval(t);
+  }, [anyGenerating, loadDocs]);
   useEffect(() => { try { localStorage.setItem("book-lang", lang); } catch { /* ignore */ } }, [lang]);
 
   const loadStory = useCallback(async () => {
@@ -151,6 +161,18 @@ export function BookTab() {
     if (e1 || e2) { setMsg((e1 ?? e2)!.message); return; }
     setMsg("Restored. The version you replaced is kept in the list.");
     await loadDocs();
+  };
+
+  const createChapter = async (chapterId?: string) => {
+    if (!slug) return;
+    setWriting(true); setMsg(null);
+    try {
+      const r = await interviewApi.writeChapter(slug, chapterId);
+      await loadDocs();
+      setKind("sample");
+      setDocId(r.chapter_id);
+    } catch (e) { setMsg((e as Error).message); }
+    setWriting(false);
   };
 
   const idx = chapters.findIndex((c) => c.id === doc?.id);
@@ -210,7 +232,7 @@ export function BookTab() {
       </div>
 
       {showPublish && slug && (
-        <PublishPanel slug={slug} story={story} chapters={chapters} bible={summaries[0] ?? null} lang={shown}
+        <PublishPanel slug={slug} story={story} chapters={chapters.filter((c) => !c.generating && (c.body_en || c.body_ko).trim())} bible={summaries[0] ?? null} lang={shown}
           onDone={async () => { await loadStory(); await loadDocs(); }} />
       )}
 
@@ -244,12 +266,29 @@ export function BookTab() {
               ))}
             </select>
           )}
-          {englishOnly && doc && !version && (
-            <a href={`/interview/${slug}?revise=${kind === "sample" ? encodeURIComponent(doc.id) : ""}`} target="_blank" rel="noreferrer"
-              className="btn-secondary !py-2 !px-3 text-sm inline-flex items-center gap-1.5 ml-auto">
-              <MessageSquare size={15} /> Give notes
-            </a>
+          {englishOnly && doc && !version && !doc.generating && (
+            <span className="ml-auto inline-flex flex-wrap gap-2">
+              <a href={`/interview/${slug}?revise=${kind === "sample" ? encodeURIComponent(doc.id) : ""}`} target="_blank" rel="noreferrer"
+                className="btn-secondary !py-2 !px-3 text-sm inline-flex items-center gap-1.5">
+                <MessageSquare size={15} /> {kind === "sample" ? "Revise this chapter" : "Give notes on the bible"}
+              </a>
+              {kind === "sample" && (
+                <button onClick={() => createChapter()} disabled={writing}
+                  className="btn-primary !py-2 !px-3 text-sm inline-flex items-center gap-1.5">
+                  <Sparkles size={15} /> Create next chapter
+                </button>
+              )}
+            </span>
           )}
+        </div>
+      )}
+
+      {englishOnly && kind === "sample" && ofKind.length === 0 && (
+        <div className="card p-6 text-center space-y-3 font-sans">
+          <p className="text-ink-600 dark:text-ink-300">No chapters yet. The first one is written from the story bible.</p>
+          <button onClick={() => createChapter()} disabled={writing} className="btn-primary !py-2">
+            <Sparkles size={15} /> Create Chapter 1
+          </button>
         </div>
       )}
 
@@ -265,8 +304,20 @@ export function BookTab() {
       )}
       {msg && <p className="text-sm text-ink-600 dark:text-ink-300 font-sans">{msg}</p>}
 
-      {doc ? (
+      {doc?.generating ? (
+        <div className="card px-6 py-12 text-center font-sans space-y-2">
+          <Loader2 size={24} className="animate-spin text-accent-500 mx-auto" />
+          <p className="text-ink-700 dark:text-ink-200">Writing {titleOf(doc, shown)} from the story bible and the chapters before it…</p>
+          <p className="text-sm text-ink-500">This usually takes 2–4 minutes. You can leave this page; it keeps going.</p>
+        </div>
+      ) : doc?.gen_error && !(shown === "en" ? doc.body_en : doc.body_ko)?.trim() ? (
+        <div className="card px-6 py-8 text-center font-sans space-y-3">
+          <p className="text-error-600 text-sm">Writing this chapter failed: {doc.gen_error}</p>
+          <button onClick={() => createChapter(doc.id)} disabled={writing} className="btn-primary !py-2"><RefreshCw size={14} /> Try again</button>
+        </div>
+      ) : doc ? (
         <>
+          {doc.gen_error && <p className="text-sm text-error-600 font-sans">The last rewrite failed: {doc.gen_error}</p>}
           {!version && <AudioBar key={`${doc.id}:${shown}:${doc.updated_at}:${doc.model_id}`} doc={doc} lang={shown} onChanged={loadDocs} />}
           <article lang={shown} className="card px-6 sm:px-10 py-8">
             <Markdown text={body} lang={shown} />
@@ -485,7 +536,11 @@ function FinalNarration({ slug, chapters, lang, onChanged }: { slug: string; cha
 
 // ── Audio ────────────────────────────────────────────────────────────────
 
-export function AudioBar({ doc, lang, readOnly = false, onChanged }: { doc: BookDoc; lang: Lang; readOnly?: boolean; onChanged?: () => void }) {
+export function AudioBar({ doc, lang, readOnly = false, onChanged, authorHint = false }: {
+  doc: BookDoc; lang: Lang; readOnly?: boolean; onChanged?: () => void;
+  /** Public reader viewed by an author: say how to add narration instead of hiding the player. */
+  authorHint?: boolean;
+}) {
   // Studio plays the draft narration; the public reader plays the final recording.
   const track = readOnly ? "final" : "draft";
   // Narration model for this page (Studio only). Changing it means the narration is recorded again.
@@ -582,7 +637,19 @@ export function AudioBar({ doc, lang, readOnly = false, onChanged }: { doc: Book
   }, [rate]);
 
   // Public reader: only a player, and only once narration exists.
-  if (readOnly && !ready) return null;
+  if (readOnly && !ready) {
+    if (!authorHint || !status) return null;
+    return (
+      <div className="card px-4 py-3 flex flex-wrap items-center gap-2 font-sans text-sm text-ink-600 dark:text-ink-300 border-dashed">
+        <Headphones size={16} className="text-ink-400" />
+        <span>
+          {status.stale ? "This chapter changed since its final narration was recorded." : "No narration for readers yet."}
+          {" "}Only you see this. Record it in Studio → Book → Publish → <strong>Final narration</strong>.
+        </span>
+        <a href="/studio" className="ml-auto text-accent-600 underline text-sm">Open Studio</a>
+      </div>
+    );
+  }
 
   const voiceLabel = readOnly
     ? `${voiceName(voices, voice)} · ${lang === "ko" ? "한국어" : "English"}`

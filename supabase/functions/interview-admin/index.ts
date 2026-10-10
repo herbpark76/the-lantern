@@ -6,7 +6,9 @@
 //   { action: "session_audio", session_id }   → { urls: { [turn_id]: signedUrl } }
 //   { action: "delete_session", session_id }  → removes a (test) session + its audio
 
-import { ELEVENLABS_API_KEY, textToSpeech, type Subject } from "../_shared/interview.ts";
+import { ELEVENLABS_API_KEY, SERVICE_ROLE_KEY, SUPABASE_URL, textToSpeech, type Subject } from "../_shared/interview.ts";
+
+declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
 import { admin, BUCKET, corsHeaders, getCaller, isStaffUser, json, jsonError, type Turn } from "../_shared/interview.ts";
 
 const MATTHEW_VOICE = "kNjmAhXxYgxjF0oyxw4c"; // English narrator voice for ghostwriter projects
@@ -103,6 +105,44 @@ Deno.serve(async (req: Request) => {
       if (on.length) await db.from("book_docs").update({ published: true }).in("id", on);
       if (off.length) await db.from("book_docs").update({ published: false }).in("id", off);
       return json({ ok: true, status: "published", published: on });
+    }
+
+    // Write the next chapter of a ghostwriter book (or rewrite chapter_id from the bible) in the
+    // background: { action: "write_chapter", story_slug, chapter_id? } → { chapter_id }
+    if (body.action === "write_chapter") {
+      const slug = String(body.story_slug ?? "");
+      const { data: subj } = await db.from("interview_subjects").select("*")
+        .eq("story_slug", slug).eq("mode", "ghostwriter").order("created_at").limit(1).maybeSingle();
+      const subject = subj as Subject | null;
+      if (!subject) return jsonError(404, "This book has no ghostwriter interview");
+      const { data: docs } = await db.from("book_docs").select("id, position, generating").eq("story_slug", slug).eq("kind", "sample");
+      const rows = (docs as Array<{ id: string; position: number; generating: boolean }>) ?? [];
+      if (rows.some((r) => r.generating)) return jsonError(409, "A chapter is already being written. Give it a few minutes.");
+
+      let chapterId = body.chapter_id ? String(body.chapter_id) : "";
+      if (chapterId) {
+        if (!rows.some((r) => r.id === chapterId)) return jsonError(404, "Chapter not found");
+        await db.from("book_docs").update({ generating: true, gen_error: null }).eq("id", chapterId);
+      } else {
+        const n = rows.reduce((m, r) => Math.max(m, r.position), 0) + 1;
+        chapterId = `${slug}/sample-${String(n).padStart(2, "0")}`;
+        const lang = subject.language === "ko" ? "ko" : "en";
+        const { error } = await db.from("book_docs").insert({
+          id: chapterId, story_slug: slug, kind: "sample", position: n,
+          [`title_${lang}`]: `Chapter ${n}`, [`voice_${lang}`]: subject.tts_voice_id,
+          model_id: subject.tts_model_id, speed: Number(subject.tts_speed) || 1,
+          generating: true, gen_error: null,
+        });
+        if (error) throw new Error(error.message);
+      }
+
+      const p = fetch(`${SUPABASE_URL}/functions/v1/interview-finish`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "write_chapter", chapter_id: chapterId }),
+      }).catch((e) => console.error("[interview-admin] write_chapter trigger failed", e));
+      if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(p);
+      return json({ chapter_id: chapterId });
     }
 
     // The voices in the ElevenLabs account, for the voice dropdowns in Studio.

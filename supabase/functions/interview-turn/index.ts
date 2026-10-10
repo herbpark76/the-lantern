@@ -104,7 +104,7 @@ async function interviewerSpeaks(
   db: SupabaseClient, subject: Subject, session: Session, turns: Turn[], extraUser?: string,
 ): Promise<{ turn: Turn; audio_url: string | null }> {
   const earlier = await earlierSessions(db, subject.id, session.session_no);
-  const rev = session.kind === "revise" ? await revisionContext(db, subject, session) : null;
+  const rev = subject.mode === "ghostwriter" ? await revisionContext(db, subject, session) : null;
   const system = systemPromptFor(subject, session, earlier, rev);
   // Plenty of room: newer models can spend part of the budget before the visible reply.
   const result = await callClaude(system, buildMessages(subject, session, turns, extraUser), 1500);

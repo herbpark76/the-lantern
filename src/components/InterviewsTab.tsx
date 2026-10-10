@@ -349,7 +349,7 @@ function SessionDetail({ session, subject, onBack, onChanged }: {
     setMsg(ghost
       ? (session.kind === "revise"
         ? "Updating the bible and revising the chapter — this can take two or three minutes…"
-        : "Updating the story bible and writing the chapter — this can take two or three minutes…")
+        : "Updating the story bible — this takes a minute or two…")
       : "Writing the translation and summary — this can take a minute or two…");
     try {
       const r = await interviewApi.regenerate(session.id);

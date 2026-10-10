@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { supabase, type Story } from "@/lib/supabase";
 import { useRouter } from "@/lib/router";
+import { useAuth } from "@/lib/auth";
 import { AudioBar, Markdown, type BookDoc, type Lang } from "@/components/BookTab";
 
 // Public reader for a published book (a stories row with settings.kind = "book"):
@@ -9,6 +10,8 @@ import { AudioBar, Markdown, type BookDoc, type Lang } from "@/components/BookTa
 
 export function BookReaderPage({ slug }: { slug: string }) {
   const { navigate } = useRouter();
+  const { profile } = useAuth();
+  const isAuthor = profile?.role === "author" || profile?.role === "admin";
   const [story, setStory] = useState<Story | null>(null);
   const [chapters, setChapters] = useState<BookDoc[]>([]);
   const [loading, setLoading] = useState(true);
@@ -20,7 +23,7 @@ export function BookReaderPage({ slug }: { slug: string }) {
       supabase.from("book_docs").select("*").eq("story_slug", slug).eq("kind", "sample").eq("published", true).order("position"),
     ]).then(([s, d]) => {
       setStory((s.data as Story | null) ?? null);
-      setChapters(((d.data as BookDoc[]) ?? []).filter((x) => x.kind === "sample" && x.published));
+      setChapters(((d.data as BookDoc[]) ?? []).filter((x) => x.kind === "sample" && x.published && !x.generating && (x.body_en || x.body_ko).trim() !== ""));
       setLoading(false);
     });
   }, [slug]);
@@ -63,7 +66,7 @@ export function BookReaderPage({ slug }: { slug: string }) {
         </button>
       </div>
 
-      <AudioBar key={`${ch.id}:${ch.updated_at}`} doc={ch} lang={lang} readOnly />
+      <AudioBar key={`${ch.id}:${ch.updated_at}`} doc={ch} lang={lang} readOnly authorHint={isAuthor} />
 
       <article lang={lang} className="card px-6 sm:px-10 py-8">
         <Markdown text={lang === "en" ? ch.body_en : ch.body_ko} lang={lang} />
