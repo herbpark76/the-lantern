@@ -113,6 +113,17 @@ export function BookTab() {
   }, [anyGenerating, loadDocs]);
   useEffect(() => { try { localStorage.setItem("book-lang", lang); } catch { /* ignore */ } }, [lang]);
 
+  // Only offer "Interview" for books whose interview is the signed-in user's own (not Mom's).
+  const [myInterviewSlugs, setMyInterviewSlugs] = useState<string[]>([]);
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      const uid = data.user?.id;
+      if (!uid) return;
+      supabase.from("interview_subjects").select("story_slug").eq("user_id", uid)
+        .then(({ data: rows }) => setMyInterviewSlugs(((rows as Array<{ story_slug: string }>) ?? []).map((r) => r.story_slug)));
+    });
+  }, []);
+
   const loadStory = useCallback(async () => {
     if (!slug) { setStory(null); return; }
     const { data } = await supabase.from("stories").select("slug, title, blurb, status, settings").eq("slug", slug).maybeSingle();
@@ -149,7 +160,9 @@ export function BookTab() {
   const shown: Lang = langs.includes(lang) ? lang : langs[0];
   const englishOnly = langs.length === 1 && langs[0] === "en";
   const version = versions.find((v) => v.id === versionId) ?? null;
-  const body = version ? (shown === "en" ? version.body_en : version.body_ko) : doc ? (shown === "en" ? doc.body_en : doc.body_ko) : "";
+  // A page written in only one language (e.g. Red Earth's English story bible) shows that language.
+  const pick = (en: string, ko: string) => (shown === "en" ? en || ko : ko || en);
+  const body = version ? pick(version.body_en, version.body_ko) : doc ? pick(doc.body_en, doc.body_ko) : "";
   const published = story?.status === "published" && story.settings?.kind === "book";
 
   const restore = async () => {
@@ -225,9 +238,9 @@ export function BookTab() {
             Content
           </KindButton>
           <KindButton active={kind === "summary"} onClick={() => { setKind("summary"); setDocId(null); }} icon={<FileText size={16} />}>
-            {englishOnly ? "Story Bible" : "Summary"}
+            {englishOnly || summaries.some((d) => d.id.endsWith("/bible")) ? "Story Bible" : "Summary"}
           </KindButton>
-          {slug && (
+          {slug && myInterviewSlugs.includes(slug) && (
             <a href={`/interview/${slug}`} target="_blank" rel="noreferrer"
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-ink-200 dark:border-ink-700 text-ink-700 dark:text-ink-200 hover:bg-ink-100 dark:hover:bg-ink-800">
               <Mic size={16} /> Interview
@@ -291,12 +304,14 @@ export function BookTab() {
               ))}
             </select>
           )}
-          {englishOnly && doc && !version && !doc.generating && (
+          {doc && !version && !doc.generating && (
             <span className="ml-auto inline-flex flex-wrap gap-2">
-              <a href={`/interview/${slug}?revise=${kind === "sample" ? encodeURIComponent(doc.id) : ""}`} target="_blank" rel="noreferrer"
-                className="btn-secondary !py-2 !px-3 text-sm inline-flex items-center gap-1.5">
-                <MessageSquare size={15} /> {kind === "sample" ? "Revise this chapter" : "Give notes on the bible"}
-              </a>
+              {englishOnly && (
+                <a href={`/interview/${slug}?revise=${kind === "sample" ? encodeURIComponent(doc.id) : ""}`} target="_blank" rel="noreferrer"
+                  className="btn-secondary !py-2 !px-3 text-sm inline-flex items-center gap-1.5">
+                  <MessageSquare size={15} /> {kind === "sample" ? "Revise this chapter" : "Give notes on the bible"}
+                </a>
+              )}
               {kind === "summary" && (
                 <button onClick={buildPlan} disabled={writing} className="btn-secondary !py-2 !px-3 text-sm inline-flex items-center gap-1.5"
                   title="Rebuild the three-act structure, plot points and chapter-by-chapter plan from the current bible">
@@ -323,7 +338,7 @@ export function BookTab() {
         </p>
       )}
 
-      {englishOnly && kind === "sample" && ofKind.length === 0 && (
+      {kind === "sample" && ofKind.length === 0 && (
         <div className="card p-6 text-center space-y-3 font-sans">
           <p className="text-ink-600 dark:text-ink-300">No chapters yet. The first one is written from the story bible.</p>
           <button onClick={() => createChapter()} disabled={writing} className="btn-primary !py-2">
@@ -344,7 +359,7 @@ export function BookTab() {
       )}
       {msg && <p className="text-sm text-ink-600 dark:text-ink-300 font-sans">{msg}</p>}
 
-      {kind === "sample" && englishOnly && chapters.length > 0 && !plan && (
+      {kind === "sample" && chapters.length > 0 && !plan && (
         <p className="text-xs text-warning-600 font-sans -mt-2">
           This book has no chapter plan yet, so new chapters only follow the bible loosely.{" "}
           <button onClick={buildPlan} disabled={writing} className="underline">Build the chapter plan</button> first.
@@ -359,7 +374,10 @@ export function BookTab() {
               ? "Building the structure and chapter plan from the bible and the chapters so far…"
               : `Writing ${titleOf(doc, shown)} from its brief in the chapter plan and the chapters before it…`}
           </p>
-          <p className="text-sm text-ink-500">This usually takes 2–4 minutes. You can leave this page; it keeps going.</p>
+          <p className="text-sm text-ink-500">
+            {!englishOnly && doc.kind === "sample" ? "Korean first, then the English translation. This usually takes 4–7 minutes." : "This usually takes 2–4 minutes."}
+            {" "}You can leave this page; it keeps going.
+          </p>
         </div>
       ) : doc?.gen_error && !(shown === "en" ? doc.body_en : doc.body_ko)?.trim() ? (
         <div className="card px-6 py-8 text-center font-sans space-y-3">

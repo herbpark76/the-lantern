@@ -111,10 +111,10 @@ Deno.serve(async (req: Request) => {
     // background: { action: "write_chapter", story_slug, chapter_id? } → { chapter_id }
     if (body.action === "write_chapter") {
       const slug = String(body.story_slug ?? "");
-      const { data: subj } = await db.from("interview_subjects").select("*")
-        .eq("story_slug", slug).eq("mode", "ghostwriter").order("created_at").limit(1).maybeSingle();
-      const subject = subj as Subject | null;
-      if (!subject) return jsonError(404, "This book has no ghostwriter interview");
+      const { data: subjRows } = await db.from("interview_subjects").select("*").eq("story_slug", slug).order("created_at");
+      const subjects = (subjRows as Subject[]) ?? [];
+      const subject = subjects.find((x) => x.mode === "ghostwriter") ?? subjects[0] ?? null;
+      if (!subject) return jsonError(404, "This book has no interview yet");
       const { data: docs } = await db.from("book_docs").select("id, position, generating").eq("story_slug", slug).eq("kind", "sample");
       const rows = (docs as Array<{ id: string; position: number; generating: boolean }>) ?? [];
       if (rows.some((r) => r.generating)) return jsonError(409, "A chapter is already being written. Give it a few minutes.");
@@ -129,7 +129,7 @@ Deno.serve(async (req: Request) => {
         const lang = subject.language === "ko" ? "ko" : "en";
         const { error } = await db.from("book_docs").insert({
           id: chapterId, story_slug: slug, kind: "sample", position: n,
-          [`title_${lang}`]: `Chapter ${n}`, [`voice_${lang}`]: subject.tts_voice_id,
+          title_en: `Chapter ${n}`, ...(lang === "ko" ? { title_ko: `제${n}장` } : {}), [`voice_${lang}`]: subject.tts_voice_id,
           model_id: subject.tts_model_id, speed: Number(subject.tts_speed) || 1,
           generating: true, gen_error: null,
         });
@@ -149,10 +149,10 @@ Deno.serve(async (req: Request) => {
     if (body.action === "replan") {
       const slug = String(body.story_slug ?? "");
       const bibleId = `${slug}/bible`;
-      const { data: subj } = await db.from("interview_subjects").select("*")
-        .eq("story_slug", slug).eq("mode", "ghostwriter").order("created_at").limit(1).maybeSingle();
-      const subject = subj as Subject | null;
-      if (!subject) return jsonError(404, "This book has no ghostwriter interview");
+      const { data: subjRows } = await db.from("interview_subjects").select("*").eq("story_slug", slug).order("created_at");
+      const subjects = (subjRows as Subject[]) ?? [];
+      const subject = subjects.find((x) => x.mode === "ghostwriter") ?? subjects[0] ?? null;
+      if (!subject) return jsonError(404, "This book has no interview yet");
       const { data: existing } = await db.from("book_docs").select("id, generating").eq("id", bibleId).maybeSingle();
       if ((existing as { generating?: boolean } | null)?.generating) return jsonError(409, "The plan is already being built.");
       if (existing) {

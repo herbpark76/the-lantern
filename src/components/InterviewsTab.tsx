@@ -3,6 +3,7 @@ import {
   Loader2, Mic, Play, RefreshCw, Volume2, Trash2, ChevronLeft, Save, UserPlus, ExternalLink, AlertTriangle, CheckCircle, KeyRound,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/lib/auth";
 import { VoicePicker } from "@/components/VoicePicker";
 import {
   ERA_OPTIONS, eraLabel, interviewApi, InterviewError, TTS_MODELS,
@@ -165,6 +166,17 @@ function SubjectView({ subject, onChanged }: { subject: InterviewSubject; onChan
     <div className="space-y-6">
       <SubjectSettings subject={subject} onSaved={onChanged} monthCost={monthCost} />
 
+      {sessions.some((s) => s.status === "active") && (() => {
+        const open = sessions.find((s) => s.status === "active")!;
+        return (
+          <div className="card px-4 py-3 text-sm font-sans border-warning-500/40 bg-warning-500/5 text-ink-700 dark:text-ink-200">
+            Session {open.session_no} is still open, so {subject.display_name}'s next visit will <strong>continue</strong> it
+            {subject.language === "ko" ? " (이어서 하기)" : ""} rather than start a new one.
+            To start fresh, open it below and click <strong>End &amp; write summary</strong>.
+          </div>
+        );
+      })()}
+
       <div>
         <h3 className="font-serif text-lg text-ink-900 dark:text-ink-50 mb-3">Sessions</h3>
         {loading ? (
@@ -206,6 +218,10 @@ function SubjectSettings({ subject, onSaved, monthCost }: { subject: InterviewSu
   const [newPw, setNewPw] = useState("");
   const [pwMsg, setPwMsg] = useState<string | null>(null);
   const ghost = subject.mode === "ghostwriter";
+  const { user } = useAuth();
+  const mine = user?.id === subject.user_id;
+  const herLink = `${window.location.origin}/interview`;
+  const [copied, setCopied] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testMsg, setTestMsg] = useState<string | null>(null);
 
@@ -260,9 +276,24 @@ function SubjectSettings({ subject, onSaved, monthCost }: { subject: InterviewSu
           <p className="text-xs text-ink-500 mt-1">
             {ghost ? "Ghostwriter" : "Memoir"} · Book: {subject.story_slug} · addressed as {subject.honorific} · last 30 days ≈ ${monthCost.toFixed(2)} of ${Number(subject.monthly_budget_usd).toFixed(0)}
           </p>
-          <a href={`/interview/${subject.story_slug}`} target="_blank" rel="noreferrer" className="text-xs text-accent-600 inline-flex items-center gap-1 mt-1">
-            <ExternalLink size={12} /> {window.location.origin}/interview/{subject.story_slug}
-          </a>
+          {mine ? (
+            <a href={`/interview/${subject.story_slug}`} target="_blank" rel="noreferrer" className="text-xs text-accent-600 inline-flex items-center gap-1 mt-1">
+              <ExternalLink size={12} /> Open your interview: {window.location.origin}/interview/{subject.story_slug}
+            </a>
+          ) : (
+            <div className="text-xs text-ink-500 mt-1 space-y-0.5">
+              <p className="inline-flex items-center gap-2">
+                <span>{subject.display_name}'s link: <code className="text-ink-700 dark:text-ink-200">{herLink}</code></span>
+                <button className="text-accent-600 underline" onClick={() => { navigator.clipboard?.writeText(herLink).then(() => setCopied(true)).catch(() => {}); }}>
+                  {copied ? "Copied" : "Copy"}
+                </button>
+              </p>
+              <p>
+                {subject.display_name} opens it on their own phone, where they're signed in, and taps Start for the next session.
+                Opening it here would sign in as you, not as {subject.display_name}.
+              </p>
+            </div>
+          )}
         </div>
         <button className="btn-primary !py-2" onClick={save} disabled={busy}>
           {busy ? <Loader2 size={16} className="animate-spin" /> : saved ? <CheckCircle size={16} /> : <Save size={16} />} {saved ? "Saved" : "Save"}

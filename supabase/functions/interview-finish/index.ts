@@ -4,10 +4,12 @@
 // and commits a markdown file to GitHub at interviews/<story_slug>/session-NN.md.
 
 import {
-  admin, bookChapters, callClaude, chaptersForPrompt, corsHeaders, currentBible, docBody, docTitle, ERAS, estimateCost, getCaller, GITHUB_REPO, GITHUB_TOKEN,
+  admin, bookChapters, callClaude, chaptersForPrompt, corsHeaders, currentBible, docBody, docTitle, SUPABASE_URL, ERAS, estimateCost, getCaller, GITHUB_REPO, GITHUB_TOKEN,
   isStaffUser, json, jsonError, SERVICE_ROLE_KEY, type Session, type Subject, type Turn,
 } from "../_shared/interview.ts";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.57.4";
+
+declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
 
 const TRANSLATE_SYSTEM = `You translate Korean interview transcripts into English for a novelist. The speaker is an elderly Korean woman from Daegu speaking in Gyeongsang dialect, transcribed by speech-to-text (expect small transcription errors; translate the evident meaning). Translate faithfully and completely, line by line, keeping each "Interviewer:" / speaker label. Preserve her voice, idioms and tone; when a Korean word or phrase carries meaning that English loses (dialect, food, kinship terms, sayings), keep it in romanized Korean with a short gloss in brackets. Output only the translation.`;
 
@@ -209,10 +211,10 @@ function chapterBrief(plan: BookPlan | null, n: number): { text: string; targetW
   };
 }
 
-async function saveBible(db: SupabaseClient, subject: Subject, md: string, note: string, plan?: BookPlan | null): Promise<void> {
+async function saveBible(db: SupabaseClient, subject: Subject, md: string, note: string, plan?: BookPlan | null, langOverride?: "en" | "ko"): Promise<void> {
   const id = `${subject.story_slug}/bible`;
   await snapshot(db, id, note);
-  const lang = subject.language === "ko" ? "ko" : "en";
+  const lang = langOverride ?? (subject.language === "ko" ? "ko" : "en");
   const { error } = await db.from("book_docs").upsert({
     id, story_slug: subject.story_slug, kind: "summary", position: 0,
     [`title_${lang}`]: "Story Bible", [`body_${lang}`]: md, [`voice_${lang}`]: subject.tts_voice_id,
@@ -295,15 +297,139 @@ async function finishGhostwriter(
   return json({ ok: true, github_path: update.github_path ?? null, github_error: update.github_error ?? null, book: true });
 }
 
+// ── Memoir books (e.g. red-earth): bible, plan and chapters built from the interview sessions ──
+
+const MEMOIR_PLAN_SYSTEM = `You are the developmental editor of a family-saga novel drawn from interviews with the author's mother, in the spirit of Toji, Taebaek Sanmaek, Pachinko and Ode to My Father: fictionalized, but true at heart. You receive the notes from her interview sessions (summaries, scene notes, follow-ups, in English, with her own phrases quoted in Korean), the current bible if any, and the chapters written so far. Be faithful: never contradict what she said; where the story needs invention (scenes, dialogue, connective tissue), say so and mark it "(invented)".
+
+Answer in English with exactly these four sections, each wrapped in its tag. Markdown sections use ## subheadings, paragraphs and - bullets only; no tables.
+
+<bible>
+The story bible: working title (Korean and English), logline, the novel's point of view and frame (present day and flashbacks), tone and style notes (the Toji/Taebaek Sanmaek register: period texture, Gyeongsang dialect in dialogue, food, seasons, objects), timeline by era with years and ages, the people (with relationships, what she said about them), places, recurring motifs and her own memorable phrasings, themes, what is known vs. invented, and a short "## Standing notes" list that applies to every chapter (e.g. sensitivities, things never to invent).
+</bible>
+${PLAN_SPEC.replace("plan a novella of about 30,000 words", "plan a novel of about 60,000 words")}
+<open_questions>
+6–10 things to ask her in the next interview that the coming chapters need, as - bullets, each in gentle Korean 존댓말 followed by English in brackets.
+</open_questions>`;
+
+function memoirChapterSystem(subject: Subject, n: number, targetWords: number): string {
+  const chars = Math.round(targetWords * 6 / 500) * 500;
+  return `You are a Korean novelist writing Chapter ${n} of a family-saga novel based on the life of ${subject.display_name === "Mom" ? "the author's mother" : subject.display_name}, born 1951 in Daegu, from her own interviews. Write in Korean, in the literary register of Park Kyung-ni's Toji and Jo Jung-rae's Taebaek Sanmaek (dense period texture, the seasons, food and objects, the omniscient narrator's long view, Gyeongsang dialect in dialogue), but never imitate or quote their text. Third person. Fictionalized, true at heart: keep every fact she gave (names, places, years, relationships, events) and invent only texture, scenes and dialogue that fit them.
+
+Follow the chapter's brief from the book plan exactly: cover its beats in order, land any plot points assigned to it, and don't run ahead into later chapters. Keep continuity with the chapters before it. Length: about ${chars.toLocaleString()} Korean characters (the equivalent of about ${targetWords.toLocaleString()} English words).
+
+Output only the chapter in markdown: first line "# 제${n}장 <title>", then paragraphs. Use "### 1", "### 2" lines only for section breaks. No other headings, no notes.`;
+}
+
+const MEMOIR_TRANSLATE_SYSTEM = `You translate a chapter of a Korean literary novel into English for the author's son, who will read it alongside the Korean. Translate faithfully and completely, keeping the period texture and the narrator's voice; render dialect as natural, slightly rustic English rather than explaining it; keep Korean words for food, kinship terms and objects when English loses them (romanized, italicized, no glosses unless essential). Keep the markdown: the first line becomes "# Chapter N: <English title>", and keep the "### 1" section breaks. Output only the translation.`;
+
+async function bookSubject(db: SupabaseClient, slug: string): Promise<Subject | null> {
+  const { data } = await db.from("interview_subjects").select("*").eq("story_slug", slug).order("created_at");
+  const rows = (data as Subject[]) ?? [];
+  return rows.find((s) => s.mode === "ghostwriter") ?? rows[0] ?? null;
+}
+
+/** All of a memoir subject's interview notes (and English transcripts, newest first, within a budget). */
+async function memoirMaterial(db: SupabaseClient, subject: Subject, transcriptBudget = 80_000): Promise<string> {
+  const { data } = await db.from("interview_sessions")
+    .select("session_no, era, summary_en, scene_notes, followups, transcript_en")
+    .eq("subject_id", subject.id).eq("status", "finished").order("session_no");
+  const rows = (data as Array<{ session_no: number; era: string; summary_en: string | null; scene_notes: string | null; followups: string | null; transcript_en: string | null }>) ?? [];
+  const notes = rows.map((r) => `## Session ${r.session_no} (${ERAS[r.era]?.label ?? r.era})\n\n### Summary\n${r.summary_en ?? ""}\n\n### Scene notes\n${r.scene_notes ?? ""}\n\n### Follow-ups\n${r.followups ?? ""}`).join("\n\n");
+  let used = 0;
+  const transcripts: string[] = [];
+  for (const r of [...rows].reverse()) {
+    const t = (r.transcript_en ?? "").trim();
+    if (!t || used + t.length > transcriptBudget) continue;
+    transcripts.unshift(`## Session ${r.session_no} transcript (English)\n\n${t}`);
+    used += t.length;
+  }
+  return `# Interview notes\n\n${notes || "(no finished sessions)"}${transcripts.length ? `\n\n# Transcripts\n\n${transcripts.join("\n\n")}` : ""}`;
+}
+
+async function replanMemoir(db: SupabaseClient, subject: Subject, slug: string): Promise<BookPlan | null> {
+  const [bible, chapters, material] = await Promise.all([
+    currentBible(db, slug, "en"), bookChapters(db, slug), memoirMaterial(db, subject, 60_000),
+  ]);
+  const input = [
+    `Current bible (may be just a session summary):\n${bible || "(none yet)"}`,
+    `Chapters written so far (English):\n${chaptersForPrompt(chapters, "en", 80_000) || "(none yet)"}`,
+    material,
+  ].join("\n\n=====\n\n");
+  const notes = await callClaude(MEMOIR_PLAN_SYSTEM, [{ role: "user", content: input }], 16000);
+  const parsed = parseSections(notes.text, ["bible", "outline", "plan_json", "open_questions"]);
+  const plan = parsePlan(parsed.plan_json);
+  await saveBible(db, subject, composeBible(parsed.bible ?? bible, parsed.outline ?? "", parsed.open_questions ?? ""), "Before rebuilding the plan", plan, "en");
+  return plan;
+}
+
+// Korean chapter first, then the English translation as a separate background job.
+async function writeMemoirChapter(db: SupabaseClient, subject: Subject, doc: { id: string; story_slug: string; position: number }): Promise<void> {
+  const chapters = await bookChapters(db, doc.story_slug);
+  const before = chapters.filter((c) => c.position < doc.position);
+  const [bible, plan, material] = await Promise.all([
+    currentBible(db, doc.story_slug, "en"), currentPlan(db, doc.story_slug), memoirMaterial(db, subject),
+  ]);
+  const brief = chapterBrief(plan, doc.position);
+  const input = [
+    `Story bible (English):\n${bible || "(none yet)"}`,
+    material,
+    before.length ? `The novel so far (Korean):\n\n${chaptersForPrompt(before, "ko", 120_000)}` : "No chapters yet: this is the opening chapter.",
+    `YOUR BRIEF FOR THIS CHAPTER:\n${brief.text}`,
+  ].join("\n\n=====\n\n");
+  const out = await callClaude(memoirChapterSystem(subject, doc.position, brief.targetWords), [{ role: "user", content: input }],
+    Math.min(32000, Math.round(brief.targetWords * 6 * 1.1) + 3000));
+  let md = out.text.trim();
+  if (!md.startsWith("# ")) md = `# 제${doc.position}장\n\n${md}`;
+  await snapshot(db, doc.id, "Before rewrite");
+  const title = md.split("\n")[0].replace(/^#\s*/, "");
+  // body_en is cleared so the old English never sits beside the new Korean; translation fills it.
+  await db.from("book_docs").update({
+    title_ko: title, body_ko: md, body_en: "", voice_ko: subject.tts_voice_id,
+    model_id: subject.tts_model_id, speed: Number(subject.tts_speed) || 0.92, updated_at: new Date().toISOString(),
+  }).eq("id", doc.id);
+}
+
+async function translateChapter(db: SupabaseClient, chapterId: string): Promise<void> {
+  try {
+    const { data } = await db.from("book_docs").select("id, story_slug, position, body_ko").eq("id", chapterId).maybeSingle();
+    const doc = data as { id: string; story_slug: string; position: number; body_ko: string } | null;
+    if (!doc?.body_ko) throw new Error("No Korean text to translate");
+    const out = await callClaude(MEMOIR_TRANSLATE_SYSTEM, [{ role: "user", content: doc.body_ko }], 16000);
+    const md = chapterHeading(out.text, doc.position);
+    await db.from("book_docs").update({
+      title_en: md.split("\n")[0].replace(/^#\s*/, ""), body_en: md, generating: false, gen_error: null,
+      updated_at: new Date().toISOString(),
+    }).eq("id", chapterId);
+    try {
+      await commitToGitHub(`books/${doc.story_slug}/chapter-${nn(doc.position)}.ko.md`, `${doc.body_ko}\n`, `Chapter ${doc.position} (${doc.story_slug}, Korean)`);
+      await commitToGitHub(`books/${doc.story_slug}/chapter-${nn(doc.position)}.en.md`, `${md}\n`, `Chapter ${doc.position} (${doc.story_slug}, English)`);
+    } catch (e) { console.error("[interview-finish] chapter GitHub commit failed", e); }
+  } catch (e) {
+    await db.from("book_docs").update({ generating: false, gen_error: `English translation failed: ${String((e as Error).message ?? e).slice(0, 200)}` }).eq("id", chapterId);
+  }
+}
+
+function startBackground(action: string, extra: Record<string, unknown>) {
+  const p = fetch(`${SUPABASE_URL}/functions/v1/interview-finish`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ action, ...extra }),
+  }).catch((e) => console.error(`[interview-finish] ${action} trigger failed`, e));
+  if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(p);
+}
+
 // "Build the chapter plan": restructure the existing bible (and what's written) into the full
 // plan without a new interview. interview-admin sets generating = true on the bible row first.
 async function replan(db: SupabaseClient, slug: string): Promise<Response> {
   const bibleId = `${slug}/bible`;
-  const { data: subjRow } = await db.from("interview_subjects").select("*")
-    .eq("story_slug", slug).eq("mode", "ghostwriter").order("created_at").limit(1).maybeSingle();
-  const subject = subjRow as Subject | null;
-  if (!subject) return jsonError(404, "No ghostwriter interview for this book");
+  const subject = await bookSubject(db, slug);
+  if (!subject) return jsonError(404, "No interview for this book");
   try {
+    if (subject.mode === "memoir") {
+      const plan = await replanMemoir(db, subject, slug);
+      await db.from("book_docs").update({ generating: false, gen_error: plan ? null : "The plan came back unreadable; the bible text was still updated." }).eq("id", bibleId);
+      return json({ ok: true, plan: !!plan });
+    }
     const lang = subject.language;
     const [bible, chapters] = await Promise.all([currentBible(db, slug, lang), bookChapters(db, slug)]);
     const input = [
@@ -330,14 +456,23 @@ async function writeChapter(db: SupabaseClient, chapterId: string): Promise<Resp
   const { data: docRow } = await db.from("book_docs").select("id, story_slug, position").eq("id", chapterId).maybeSingle();
   const doc = docRow as { id: string; story_slug: string; position: number } | null;
   if (!doc) return jsonError(404, "Chapter not found");
-  const { data: subjRow } = await db.from("interview_subjects").select("*")
-    .eq("story_slug", doc.story_slug).eq("mode", "ghostwriter").order("created_at").limit(1).maybeSingle();
-  const subject = subjRow as Subject | null;
+  const subject = await bookSubject(db, doc.story_slug);
   if (!subject) {
-    await db.from("book_docs").update({ generating: false, gen_error: "No ghostwriter interview for this book" }).eq("id", chapterId);
-    return jsonError(404, "No ghostwriter interview for this book");
+    await db.from("book_docs").update({ generating: false, gen_error: "No interview for this book" }).eq("id", chapterId);
+    return jsonError(404, "No interview for this book");
   }
   const lang = subject.language;
+  if (subject.mode === "memoir") {
+    try {
+      await writeMemoirChapter(db, subject, doc);
+      startBackground("translate_chapter", { chapter_id: chapterId }); // stays "generating" until English is in
+      return json({ ok: true, chapter: chapterId, translating: true });
+    } catch (e) {
+      const msg = String((e as Error).message ?? e).slice(0, 300);
+      await db.from("book_docs").update({ generating: false, gen_error: msg }).eq("id", chapterId);
+      return jsonError(500, msg);
+    }
+  }
   try {
     const chapters = await bookChapters(db, doc.story_slug);
     const before = chapters.filter((c) => c.position < doc.position);
@@ -443,9 +578,15 @@ Deno.serve(async (req: Request) => {
     const { session_id, skip_github, action, chapter_id, story_slug } = await req.json().catch(() => ({}));
 
     // Background jobs started by interview-admin (service role only).
-    if (action === "write_chapter" || action === "replan") {
+    if (action === "write_chapter" || action === "replan" || action === "translate_chapter") {
       const bearer = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
       if (bearer !== SERVICE_ROLE_KEY) return jsonError(403, "Forbidden");
+      if (action === "translate_chapter") {
+        // Answer right away and translate in the background, so the caller isn't held open.
+        const job = translateChapter(db, String(chapter_id ?? ""));
+        if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(job); else await job;
+        return json({ accepted: true });
+      }
       return action === "replan"
         ? await replan(db, String(story_slug ?? ""))
         : await writeChapter(db, String(chapter_id ?? ""));
