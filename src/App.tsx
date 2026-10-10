@@ -9,10 +9,14 @@ import { StoryDetailPage } from "@/pages/StoryDetail";
 import { ReaderPage } from "@/pages/Reader";
 import { ShelfPage } from "@/pages/Shelf";
 import { StudioPage } from "@/pages/Studio";
+import { InterviewPage } from "@/pages/Interview";
 
 function Routes() {
   const { path } = useRouter();
   const { segments } = parsePath(path);
+
+  // Interview Mode is a full-screen, nav-free page for the person telling her story.
+  if (segments[0] === "interview") return <InterviewPage />;
 
   let page: React.ReactNode;
 

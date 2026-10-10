@@ -13,3 +13,15 @@ entrypoint = "./functions/list-edit-requests/index.ts"
 [functions.narrate]
 verify_jwt = true
 entrypoint = "./functions/narrate/index.ts"
+
+[functions.interview-turn]
+verify_jwt = true
+entrypoint = "./functions/interview-turn/index.ts"
+
+[functions.interview-finish]
+verify_jwt = false
+entrypoint = "./functions/interview-finish/index.ts"
+
+[functions.interview-admin]
+verify_jwt = true
+entrypoint = "./functions/interview-admin/index.ts"

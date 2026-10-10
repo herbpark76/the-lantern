@@ -7,10 +7,11 @@ import { fetchManifest } from "@/lib/narration";
 import {
   Settings, RefreshCw, Map as MapIcon, Eye, GitPullRequest, BookOpen, BarChart3,
   Film, Users, Loader2, CheckCircle, XCircle, ExternalLink, ChevronRight,
-  MessageSquare, Send, X, Headphones,
+  MessageSquare, Send, X, Headphones, Mic,
 } from "lucide-react";
+import { InterviewsTab } from "@/components/InterviewsTab";
 
-type StudioTab = "stories" | "map" | "preview" | "queue" | "bible" | "tallies" | "directors" | "readers";
+type StudioTab = "stories" | "map" | "preview" | "queue" | "bible" | "tallies" | "directors" | "readers" | "interviews";
 
 export function StudioPage() {
   const { profile } = useAuth();
@@ -56,6 +57,7 @@ export function StudioPage() {
     { key: "tallies", label: "Tallies", icon: BarChart3 },
     { key: "directors", label: "Director's Cut", icon: Film },
     { key: "readers", label: "Readers", icon: Users },
+    { key: "interviews", label: "Interviews", icon: Mic },
   ];
 
   return (
@@ -86,7 +88,7 @@ export function StudioPage() {
       </div>
 
       {/* Story selector for tabs that need it */}
-      {(tab !== "stories" && tab !== "queue") && (
+      {(tab !== "stories" && tab !== "queue" && tab !== "interviews") && (
         <div className="mb-6">
           <select
             value={selectedSlug ?? ""}
@@ -113,6 +115,7 @@ export function StudioPage() {
       {tab === "tallies" && selectedSlug && <TalliesTab slug={selectedSlug} />}
       {tab === "directors" && selectedSlug && <DirectorsTab slug={selectedSlug} profile={profile} />}
       {tab === "readers" && <ReadersTab stories={stories} />}
+      {tab === "interviews" && <InterviewsTab />}
     </div>
   );
 }
