@@ -6,7 +6,7 @@
 //   { action: "session_audio", session_id }   → { urls: { [turn_id]: signedUrl } }
 //   { action: "delete_session", session_id }  → removes a (test) session + its audio
 
-import { textToSpeech, type Subject } from "../_shared/interview.ts";
+import { ELEVENLABS_API_KEY, textToSpeech, type Subject } from "../_shared/interview.ts";
 import { admin, BUCKET, corsHeaders, getCaller, isStaffUser, json, jsonError, type Turn } from "../_shared/interview.ts";
 
 const MATTHEW_VOICE = "kNjmAhXxYgxjF0oyxw4c"; // English narrator voice for ghostwriter projects
@@ -103,6 +103,24 @@ Deno.serve(async (req: Request) => {
       if (on.length) await db.from("book_docs").update({ published: true }).in("id", on);
       if (off.length) await db.from("book_docs").update({ published: false }).in("id", off);
       return json({ ok: true, status: "published", published: on });
+    }
+
+    // The voices in the ElevenLabs account, for the voice dropdowns in Studio.
+    if (body.action === "list_voices") {
+      if (!ELEVENLABS_API_KEY) return jsonError(503, "ELEVENLABS_API_KEY is not configured");
+      const resp = await fetch("https://api.elevenlabs.io/v1/voices", { headers: { "xi-api-key": ELEVENLABS_API_KEY } });
+      if (!resp.ok) {
+        const err = await resp.text();
+        let reason = err;
+        try { const j = JSON.parse(err); reason = j?.detail?.message ?? j?.detail?.status ?? err; } catch { /* raw */ }
+        return jsonError(502, `ElevenLabs ${resp.status}: ${String(reason).slice(0, 200)}`);
+      }
+      const data = await resp.json() as { voices?: Array<{ voice_id: string; name: string; category?: string; preview_url?: string; labels?: Record<string, string> }> };
+      const voices = (data.voices ?? []).map((v) => ({
+        id: v.voice_id, name: v.name, category: v.category ?? "", preview_url: v.preview_url ?? null,
+        description: [v.labels?.gender, v.labels?.age, v.labels?.accent].filter(Boolean).join(", "),
+      })).sort((a, b) => a.name.localeCompare(b.name));
+      return json({ voices });
     }
 
     // Hear a voice/model/speed before saving it: { action: "voice_test", voice_id, model_id, speed, language, honorific? }

@@ -3,6 +3,7 @@ import {
   Loader2, Mic, Play, RefreshCw, Volume2, Trash2, ChevronLeft, Save, UserPlus, ExternalLink, AlertTriangle, CheckCircle, KeyRound,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { VoicePicker } from "@/components/VoicePicker";
 import {
   ERA_OPTIONS, eraLabel, interviewApi, InterviewError, TTS_MODELS,
   type InterviewMode, type InterviewSession, type InterviewSubject, type InterviewTurn,
@@ -297,7 +298,7 @@ function SubjectSettings({ subject, onSaved, monthCost }: { subject: InterviewSu
       <details className="text-sm">
         <summary className="cursor-pointer text-ink-500">Voice, budget and account</summary>
         <div className="grid md:grid-cols-4 gap-3 mt-3">
-          <Field label="ElevenLabs voice ID"><input className="input-field !py-2 text-sm" value={voiceId} onChange={(e) => setVoiceId(e.target.value)} /></Field>
+          <Field label="Voice"><VoicePicker value={voiceId} onChange={setVoiceId} /></Field>
           <Field label="TTS model">
             <select className="input-field !py-2 text-sm" value={model} onChange={(e) => setModel(e.target.value)}>
               {TTS_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}

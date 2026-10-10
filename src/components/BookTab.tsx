@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { InterviewError, interviewApi, TTS_MODELS } from "@/lib/interview";
+import { VoicePicker, useVoices, voiceName } from "@/components/VoicePicker";
 
 // Studio > Book: read a book's sample chapters and session summaries in English or Korean,
 // and listen to them narrated (audio made on demand by the `book-audio` edge function).
@@ -387,6 +388,9 @@ function KindButton({ active, onClick, icon, children }: { active: boolean; onCl
 
 function FinalNarration({ slug, chapters, lang, onChanged }: { slug: string; chapters: BookDoc[]; lang: Lang; onChanged: () => void }) {
   const [model, setModel] = useState(chapters[0]?.final_model_id ?? "eleven_v4");
+  const voiceCol = lang === "ko" ? "voice_ko" : "voice_en";
+  const [voice, setVoice] = useState(chapters[0]?.[voiceCol] ?? "");
+  const mixedVoices = new Set(chapters.map((c) => c[voiceCol])).size > 1;
   const [stats, setStats] = useState<Record<string, AudioStatus>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -405,6 +409,15 @@ function FinalNarration({ slug, chapters, lang, onChanged }: { slug: string; cha
   const changeModel = async (m: string) => {
     setModel(m);
     const { error: e } = await supabase.from("book_docs").update({ final_model_id: m }).eq("story_slug", slug).eq("kind", "sample");
+    if (e) { setError(e.message); return; }
+    onChanged();
+    refresh();
+  };
+
+  const changeVoice = async (v: string) => {
+    if (!v) return;
+    setVoice(v);
+    const { error: e } = await supabase.from("book_docs").update({ [voiceCol]: v }).eq("story_slug", slug).eq("kind", "sample");
     if (e) { setError(e.message); return; }
     onChanged();
     refresh();
@@ -436,10 +449,14 @@ function FinalNarration({ slug, chapters, lang, onChanged }: { slug: string; cha
         <Headphones size={16} className="text-accent-500" />
         <span className="text-sm font-medium text-ink-800 dark:text-ink-100">Final narration</span>
         <span className="text-xs text-ink-500">What readers hear. Separate from the Studio draft narration.</span>
-        <select value={model} onChange={(e) => changeModel(e.target.value)} className="input-field !py-1 !px-2 !w-auto text-xs ml-auto" disabled={!!busy}>
-          {TTS_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-        </select>
+        <span className="ml-auto inline-flex flex-wrap items-center gap-2">
+          <VoicePicker value={voice} onChange={changeVoice} size="sm" disabled={!!busy} />
+          <select value={model} onChange={(e) => changeModel(e.target.value)} className="input-field !py-1 !px-2 !w-auto text-xs" disabled={!!busy}>
+            {TTS_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+          </select>
+        </span>
       </div>
+      {mixedVoices && <p className="text-xs text-warning-600">These chapters use different voices. Picking a voice here sets it for every chapter.</p>}
       <ul className="space-y-1 text-sm">
         {chapters.map((c) => {
           const s = stats[c.id];
@@ -479,6 +496,18 @@ export function AudioBar({ doc, lang, readOnly = false, onChanged }: { doc: Book
     if (error) { setModel(doc.model_id ?? "eleven_v3"); return; }
     onChanged?.();
   };
+  // Voice for this page's narration (both the Studio draft and the final recording).
+  const voiceCol = lang === "ko" ? "voice_ko" : "voice_en";
+  const [voice, setVoice] = useState(doc[voiceCol]);
+  const changeVoice = async (v: string) => {
+    if (!v) return;
+    setVoice(v);
+    const { error } = await supabase.from("book_docs").update({ [voiceCol]: v }).eq("id", doc.id);
+    if (error) { setVoice(doc[voiceCol]); return; }
+    onChanged?.();
+  };
+  const { voices } = useVoices();
+  const voicePicker = readOnly ? null : <VoicePicker value={voice} onChange={changeVoice} size="sm" />;
   const modelPicker = readOnly ? null : (
     <select value={model} onChange={(e) => changeModel(e.target.value)} className="input-field !py-1 !px-2 !w-auto text-xs" title="Narration model">
       {TTS_MODELS.map((m) => <option key={m.id} value={m.id}>{m.id}</option>)}
@@ -555,9 +584,9 @@ export function AudioBar({ doc, lang, readOnly = false, onChanged }: { doc: Book
   // Public reader: only a player, and only once narration exists.
   if (readOnly && !ready) return null;
 
-  const voiceId = lang === "ko" ? doc.voice_ko : doc.voice_en;
-  const voiceName = voiceId === "UzElYEdLTwdjry68bt1c" ? "Daegu voice" : voiceId === "kNjmAhXxYgxjF0oyxw4c" ? "Matthew" : "Narrator";
-  const voiceLabel = `${voiceName} · ${lang === "ko" ? "한국어" : "English"}${readOnly ? "" : " · Studio draft"}`;
+  const voiceLabel = readOnly
+    ? `${voiceName(voices, voice)} · ${lang === "ko" ? "한국어" : "English"}`
+    : `Studio draft · ${lang === "ko" ? "한국어" : "English"}`;
 
   return (
     <div className="card px-4 py-3 flex flex-wrap items-center gap-3 font-sans">
@@ -574,6 +603,7 @@ export function AudioBar({ doc, lang, readOnly = false, onChanged }: { doc: Book
             {[0.6, 0.7, 0.75, 0.8, 0.85, 0.9, 1, 1.1, 1.25].map((r) => <option key={r} value={r}>{r}×</option>)}
           </select>
           <span className="text-xs text-ink-400 ml-auto">{voiceLabel}</span>
+          {voicePicker}
           {modelPicker}
           {!readOnly && (
             <button onClick={() => generate(true)} disabled={busy} className="btn-ghost !px-2 !py-1 text-xs" title="Re-record">
@@ -591,7 +621,7 @@ export function AudioBar({ doc, lang, readOnly = false, onChanged }: { doc: Book
             {status?.stale ? "The text changed since the last recording." : "No narration yet."}
             {status && status.ready > 0 && status.ready < status.total ? ` ${status.ready} of ${status.total} parts recorded.` : ""}
           </span>
-          <span className="ml-auto">{modelPicker}</span>
+          <span className="ml-auto inline-flex items-center gap-2">{voicePicker}{modelPicker}</span>
           <button onClick={() => generate(false)} className="btn-primary !py-1.5 !px-3 text-sm">
             <Headphones size={14} /> {status && status.ready > 0 && !status.stale ? "Finish recording" : "Record narration"}
           </button>

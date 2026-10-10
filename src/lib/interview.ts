@@ -3,6 +3,14 @@ import { supabase } from "@/lib/supabase";
 export type InterviewMode = "memoir" | "ghostwriter";
 export type SessionKind = "interview" | "revise";
 
+export interface ElevenVoice {
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+  preview_url: string | null;
+}
+
 // ── Types shared by the /interview page and Studio > Interviews ──
 
 export interface InterviewSubject {
@@ -198,6 +206,7 @@ export const interviewApi = {
     invoke<{ ok: boolean; status: string }>("interview-admin", { action: "publish_book", ...p }),
   unpublishBook: (story_slug: string) =>
     invoke<{ ok: boolean; status: string }>("interview-admin", { action: "unpublish_book", story_slug }),
+  listVoices: () => invoke<{ voices: ElevenVoice[] }>("interview-admin", { action: "list_voices" }),
   voiceTest: (p: { voice_id: string; model_id: string; speed: number; language: string; honorific?: string }) =>
     invoke<{ audio: string; text: string }>("interview-admin", { action: "voice_test", ...p }),
   setPassword: (subject_id: string, password: string) =>
