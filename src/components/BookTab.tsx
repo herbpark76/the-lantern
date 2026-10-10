@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, FileText, Headphones, Loader2, Pause, Play, RefreshCw, SkipBack, SkipForward } from "lucide-react";
+import { BookOpen, FileText, Headphones, Loader2, Mic, Pause, Play, RefreshCw, SkipBack, SkipForward } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { InterviewError } from "@/lib/interview";
 
@@ -95,13 +95,19 @@ export function BookTab() {
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-3 font-sans">
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <KindButton active={kind === "sample"} onClick={() => { setKind("sample"); setDocId(null); }} icon={<BookOpen size={16} />}>
             {englishOnly ? "Chapter" : "Sample Chapter"}
           </KindButton>
           <KindButton active={kind === "summary"} onClick={() => { setKind("summary"); setDocId(null); }} icon={<FileText size={16} />}>
             {englishOnly ? "Story Bible" : "Summary"}
           </KindButton>
+          {slug && (
+            <a href={`/interview/${slug}`} target="_blank" rel="noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-ink-200 dark:border-ink-700 text-ink-700 dark:text-ink-200 hover:bg-ink-100 dark:hover:bg-ink-800">
+              <Mic size={16} /> Interview
+            </a>
+          )}
         </div>
         {langs.length > 1 && <div className="inline-flex rounded-lg border border-ink-200 dark:border-ink-700 overflow-hidden text-sm">
           {langs.map((l) => (
