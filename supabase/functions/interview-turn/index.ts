@@ -104,8 +104,9 @@ async function interviewerSpeaks(
 ): Promise<{ turn: Turn; audio_url: string | null }> {
   const earlier = await earlierSessions(db, subject.id, session.session_no);
   const system = systemPromptFor(subject, session, earlier);
-  const result = await callClaude(system, buildMessages(subject, session, turns, extraUser), 400);
-  const text = cleanSpoken(result.text) || "그 얘기 조금 더 해 주시겠어요?";
+  // Plenty of room: newer models can spend part of the budget before the visible reply.
+  const result = await callClaude(system, buildMessages(subject, session, turns, extraUser), 1500);
+  const text = cleanSpoken(result.text) || (subject.language === "en" ? "Tell me a little more about that?" : "그 얘기 조금 더 해 주시겠어요?");
 
   const turnNo = (turns[turns.length - 1]?.turn_no ?? 0) + 1;
   let audioPath: string | null = null;

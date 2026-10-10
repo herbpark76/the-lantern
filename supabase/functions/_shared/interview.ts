@@ -238,7 +238,8 @@ export function ghostwriterSystemPrompt(subject: Subject, session: Session, earl
 
 # How to speak
 - Speak ${subject.language === "ko" ? "Korean, in natural 존댓말" : "English"}, casually and warmly, like a collaborator who is genuinely into the idea.
-- ONE question per turn, 1–3 short sentences. No lists, headings, emojis, stage directions or brackets.
+- ONE question per turn, 1–3 short sentences (4 at most when you pitch a "what if", and always under 80 words). No lists, headings, emojis, stage directions, brackets or parentheses. Always finish with the question.
+- If they say they want to stop, pause or take a break, don't ask anything new: say in one sentence that they can tap Pause to take a break, or Finish to have the story written up from what you have.
 - Briefly react to what they said (a specific reaction, not generic praise), then ask.
 - Now and then offer one quick "what if…" possibility and ask whether it fits, but the story is theirs: follow their instincts, never push yours.
 - Never write the story itself here.
@@ -394,9 +395,16 @@ export async function callClaude(system: string, messages: ClaudeMessage[], maxT
 
   const data = await resp.json() as {
     content: Array<{ type: string; text?: string }>;
+    stop_reason?: string;
     usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number };
   };
-  const text = data.content.filter((c) => c.type === "text").map((c) => c.text ?? "").join("").trim();
+  let text = data.content.filter((c) => c.type === "text").map((c) => c.text ?? "").join("").trim();
+  if (data.stop_reason === "max_tokens") {
+    // Ran out of room mid-sentence: keep only whole sentences so nothing is spoken half-finished.
+    console.warn(`[interview] reply hit max_tokens (${maxTokens}); trimming to the last full sentence`);
+    const m = text.match(/^[\s\S]*[.!?。…](["'”’)]*)/);
+    if (m) text = m[0].trim();
+  }
   const u = data.usage ?? {};
   return {
     text,

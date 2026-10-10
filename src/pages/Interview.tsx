@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Mic, Square, RotateCcw, SkipForward, Volume2, Loader2, Keyboard, Send, X } from "lucide-react";
+import { Mic, Square, RotateCcw, SkipForward, Volume2, Loader2, Keyboard, Send, X, Pause } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { interviewApi, InterviewError, pickRecorderMime, setInterviewSlug, SILENT_WAV, type InterviewChoice, type InterviewState, type Question } from "@/lib/interview";
 
@@ -61,6 +61,8 @@ const STR = {
     wait: "잠시만요…",
     enter: "들어가기",
     choose: "어떤 이야기를 할까요? · Which story?",
+    pause: "잠깐 쉬기",
+    paused: "잠깐 쉬어요. 준비되시면 말하기를 눌러 주세요.",
   },
   en: {
     title: "Story session",
@@ -114,6 +116,8 @@ const STR = {
     wait: "One moment…",
     enter: "Sign in",
     choose: "Which story? · 어떤 이야기를 할까요?",
+    pause: "Pause",
+    paused: "Paused. Tap Speak when you're ready.",
   },
 };
 
@@ -179,6 +183,7 @@ export function InterviewPage({ slug }: { slug?: string }) {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const vadTimerRef = useRef<number | null>(null);
   const discardRef = useRef(false);
+  const pausedRef = useRef<"pause" | "end" | null>(null);
   // Always call the latest version of these from audio callbacks.
   const afterQuestionRef = useRef<() => void>(() => {});
 
@@ -413,7 +418,8 @@ export function InterviewPage({ slug }: { slug?: string }) {
     chunksRef.current = [];
     if (discardRef.current) {
       discardRef.current = false;
-      setNotice(T.tapWhenReady);
+      setNotice(pausedRef.current === "end" ? null : pausedRef.current === "pause" ? T.paused : T.tapWhenReady);
+      pausedRef.current = null;
       setPhase("ready");
       return;
     }
@@ -512,6 +518,22 @@ export function InterviewPage({ slug }: { slug?: string }) {
       showError(e);
       setPhase("ready");
     }
+  };
+
+  // Pause: stop the question or the listening (nothing is sent) and wait for a tap.
+  // With end=true it then asks "Finish?" — the hands-free mic hides the bottom bar otherwise.
+  const handlePause = (end = false) => {
+    if (end) setConfirmEnd(true);
+    if (phaseRef.current === "recording") {
+      pausedRef.current = end ? "end" : "pause";
+      discardRef.current = true;
+      stopVad();
+      stopRecording();
+      return;
+    }
+    stopAudio();
+    setNotice(end ? null : T.paused);
+    setPhase("ready");
   };
 
   afterQuestionRef.current = () => {
@@ -741,6 +763,18 @@ export function InterviewPage({ slug }: { slug?: string }) {
         <p className="text-center text-base text-[#7a7160] pb-3">{T.pauseHint}</p>
       )}
 
+      {/* While listening or asking: a way to take a break or wrap up without waiting. */}
+      {recording && (
+        <div className="pb-1 grid grid-cols-2 gap-3">
+          <button onClick={() => handlePause(false)} className="py-3.5 rounded-2xl bg-[#efe8dc] text-[#453f35] text-lg inline-flex items-center justify-center gap-2">
+            <Pause size={20} /> {T.pause}
+          </button>
+          <button onClick={() => handlePause(true)} className="py-3.5 rounded-2xl border border-[#d4cec1] text-[#5c5447] text-lg">
+            {T.end}
+          </button>
+        </div>
+      )}
+
       {/* Bottom actions */}
       {!recording && (
         <div className="pb-1 space-y-2">
@@ -752,25 +786,31 @@ export function InterviewPage({ slug }: { slug?: string }) {
               <SkipForward size={20} /> {T.skip}
             </button>
           </div>
+          {confirmEnd ? (
+            <div className="flex items-center justify-center gap-3 py-1">
+              <span className="text-lg text-[#453f35]">{T.endQ}</span>
+              <button onClick={handleFinish} className="px-5 py-3 rounded-xl bg-[#453f35] text-white text-lg">{T.yes}</button>
+              <button onClick={() => setConfirmEnd(false)} className="px-5 py-3 rounded-xl bg-[#efe8dc] text-lg">{T.no}</button>
+            </div>
+          ) : (
           <div className="flex items-center justify-between">
             <button onClick={() => setTyping(true)} disabled={thinking} className="px-2 py-3 text-lg text-[#7a7160] inline-flex items-center gap-2 disabled:opacity-40">
               <Keyboard size={20} /> {T.type}
             </button>
-            <button onClick={toggleAutoListen} className="px-2 py-3 text-base text-[#7a7160]">
-              {T.auto(autoListen)}
-            </button>
-            {confirmEnd ? (
-              <div className="flex items-center gap-2">
-                <span className="text-lg text-[#453f35]">{T.endQ}</span>
-                <button onClick={handleFinish} className="px-4 py-3 rounded-xl bg-[#453f35] text-white text-lg">{T.yes}</button>
-                <button onClick={() => setConfirmEnd(false)} className="px-4 py-3 rounded-xl bg-[#efe8dc] text-lg">{T.no}</button>
-              </div>
+            {speaking ? (
+              <button onClick={() => handlePause(false)} className="px-3 py-3 text-lg text-[#453f35] inline-flex items-center gap-1.5">
+                <Pause size={18} /> {T.pause}
+              </button>
             ) : (
-              <button onClick={() => setConfirmEnd(true)} disabled={thinking} className="px-4 py-3 rounded-xl text-lg text-[#5c5447] border border-[#d4cec1] disabled:opacity-40">
-                {T.end}
+              <button onClick={toggleAutoListen} className="px-2 py-3 text-base text-[#7a7160]">
+                {T.auto(autoListen)}
               </button>
             )}
+            <button onClick={() => setConfirmEnd(true)} disabled={thinking} className="px-4 py-3 rounded-xl text-lg text-[#5c5447] border border-[#d4cec1] disabled:opacity-40">
+              {T.end}
+            </button>
           </div>
+          )}
         </div>
       )}
     </Shell>
