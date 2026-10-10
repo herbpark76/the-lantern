@@ -145,7 +145,10 @@ function AudioBar({ doc, lang }: { doc: BookDoc; lang: Lang }) {
   const [error, setError] = useState<string | null>(null);
   const [part, setPart] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const [rate, setRate] = useState(1);
+  // Listening speed, remembered on this device. Pitch stays natural when slowed.
+  const [rate, setRate] = useState<number>(() => {
+    try { return Number(localStorage.getItem("book-rate")) || 0.85; } catch { return 0.85; }
+  });
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const cancelRef = useRef(false);
 
@@ -182,6 +185,7 @@ function AudioBar({ doc, lang }: { doc: BookDoc; lang: Lang }) {
     if (!audioRef.current) audioRef.current = new Audio();
     const a = audioRef.current;
     a.src = status.urls[n];
+    a.preservesPitch = true;
     a.playbackRate = rate;
     a.onended = () => {
       if (n + 1 < (status?.urls.length ?? 0)) playPart(n + 1);
@@ -198,7 +202,10 @@ function AudioBar({ doc, lang }: { doc: BookDoc; lang: Lang }) {
     playPart(part);
   };
 
-  useEffect(() => { if (audioRef.current) audioRef.current.playbackRate = rate; }, [rate]);
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.playbackRate = rate;
+    try { localStorage.setItem("book-rate", String(rate)); } catch { /* ignore */ }
+  }, [rate]);
 
   const voiceLabel = lang === "ko" ? "Daegu voice · 한국어" : "Daegu voice · English";
 
@@ -214,7 +221,7 @@ function AudioBar({ doc, lang }: { doc: BookDoc; lang: Lang }) {
           <button onClick={() => playPart(Math.min((status?.total ?? 1) - 1, part + 1))} className="btn-ghost !px-2" aria-label="Next part"><SkipForward size={16} /></button>
           <span className="text-sm text-ink-600 dark:text-ink-300">Part {part + 1} of {status!.total}</span>
           <select value={rate} onChange={(e) => setRate(Number(e.target.value))} className="input-field !py-1 !px-2 !w-auto text-sm">
-            {[0.85, 1, 1.1, 1.25].map((r) => <option key={r} value={r}>{r}×</option>)}
+            {[0.6, 0.7, 0.75, 0.8, 0.85, 0.9, 1, 1.1, 1.25].map((r) => <option key={r} value={r}>{r}×</option>)}
           </select>
           <span className="text-xs text-ink-400 ml-auto">{voiceLabel}</span>
           <button onClick={() => generate(true)} disabled={busy} className="btn-ghost !px-2 !py-1 text-xs" title="Re-record">

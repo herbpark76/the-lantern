@@ -17,6 +17,11 @@ type Phase =
 
 const MAX_RECORD_MS = 5 * 60 * 1000;
 const MIN_RECORD_MS = 700;
+// Hands-free listening: after she has spoken, this much quiet ends her answer.
+const SILENCE_MS = 10_000;
+// If she says nothing at all for this long, stop listening and wait for a tap.
+const NO_SPEECH_MS = 60_000;
+const SILENCE_COUNTDOWN_FROM_MS = 4_000;
 
 export function InterviewPage() {
   const { session: authSession, loading: authLoading } = useAuth();
@@ -41,6 +46,11 @@ export function InterviewPage() {
   const [elapsed, setElapsed] = useState(0);
   const [typing, setTyping] = useState(false);
   const [typedText, setTypedText] = useState("");
+  const [autoListen, setAutoListen] = useState<boolean>(() => {
+    try { return localStorage.getItem("interview-auto-listen") !== "off"; } catch { return true; }
+  });
+  const [heardVoice, setHeardVoice] = useState(false);
+  const [silenceLeft, setSilenceLeft] = useState<number | null>(null);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -51,6 +61,13 @@ export function InterviewPage() {
   const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
   const phaseRef = useRef<Phase>("loading");
   phaseRef.current = phase;
+  const autoListenRef = useRef(autoListen);
+  autoListenRef.current = autoListen;
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const vadTimerRef = useRef<number | null>(null);
+  const discardRef = useRef(false);
+  // Always call the latest version of these from audio callbacks.
+  const afterQuestionRef = useRef<() => void>(() => {});
 
   // ── Load state ──
   useEffect(() => {
@@ -118,9 +135,9 @@ export function InterviewPage() {
 
   const playQuestion = useCallback((q: Question | null) => {
     setNeedsTapToPlay(false);
-    if (!q?.audio_url) { setPhase("ready"); return; }
+    if (!q?.audio_url) { afterQuestionRef.current(); return; }
     const a = getAudio();
-    a.onended = () => { if (phaseRef.current === "speaking") setPhase("ready"); };
+    a.onended = () => { if (phaseRef.current === "speaking") afterQuestionRef.current(); };
     a.onerror = () => { if (phaseRef.current === "speaking") setPhase("ready"); };
     a.src = q.audio_url;
     setPhase("speaking");
@@ -142,6 +159,15 @@ export function InterviewPage() {
     const a = getAudio();
     a.src = SILENT_WAV;
     a.play().catch(() => {});
+    try {
+      const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!audioCtxRef.current && Ctx) audioCtxRef.current = new Ctx();
+      audioCtxRef.current?.resume().catch(() => {});
+    } catch { /* no Web Audio: hands-free falls back to the button */ }
+    if (autoListenRef.current) {
+      // Ask for the microphone now, while she is tapping, so the permission prompt isn't a surprise later.
+      navigator.mediaDevices?.getUserMedia({ audio: true }).then((st) => st.getTracks().forEach((t) => t.stop())).catch(() => {});
+    }
     acquireWakeLock();
     setError(null); setErrorDetail(null);
     setPhase("thinking");
@@ -164,9 +190,60 @@ export function InterviewPage() {
     timerRef.current = null;
   };
 
+  const stopVad = () => {
+    if (vadTimerRef.current) window.clearInterval(vadTimerRef.current);
+    vadTimerRef.current = null;
+    setSilenceLeft(null);
+  };
+
   const releaseMic = () => {
+    stopVad();
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
+  };
+
+  // Listen to the mic level: once she has spoken, SILENCE_MS of quiet ends the answer.
+  const startVad = (stream: MediaStream) => {
+    const ctx = audioCtxRef.current;
+    if (!ctx) return;
+    ctx.resume().catch(() => {});
+    const src = ctx.createMediaStreamSource(stream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    src.connect(analyser);
+    const buf = new Float32Array(analyser.fftSize);
+    const started = Date.now();
+    let floor = 0;
+    let floorSamples = 0;
+    let voicedMs = 0;
+    let lastVoice = 0;
+    let spoke = false;
+    setHeardVoice(false);
+    vadTimerRef.current = window.setInterval(() => {
+      analyser.getFloatTimeDomainData(buf);
+      let sum = 0;
+      for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+      const rms = Math.sqrt(sum / buf.length);
+      const now = Date.now();
+      if (now - started < 700) { floor += rms; floorSamples++; return; } // learn the room's background level
+      const base = floorSamples ? floor / floorSamples : 0.005;
+      const threshold = Math.max(0.012, base * 2.5);
+      if (rms > threshold) {
+        voicedMs += 100;
+        lastVoice = now;
+        if (!spoke && voicedMs >= 400) { spoke = true; setHeardVoice(true); }
+        setSilenceLeft(null);
+      } else if (spoke) {
+        const quiet = now - lastVoice;
+        if (quiet >= SILENCE_MS) { stopVad(); stopRecording(); return; }
+        setSilenceLeft(quiet >= SILENCE_COUNTDOWN_FROM_MS ? Math.ceil((SILENCE_MS - quiet) / 1000) : null);
+      } else if (now - started >= NO_SPEECH_MS) {
+        // Nothing said at all: stop quietly and wait for her to tap.
+        stopVad();
+        discardRef.current = true;
+        stopRecording();
+      }
+    }, 100);
   };
 
   const startRecording = async () => {
@@ -184,8 +261,10 @@ export function InterviewPage() {
       rec.ondataavailable = (ev) => { if (ev.data.size > 0) chunksRef.current.push(ev.data); };
       rec.onstop = () => handleRecorded(rec.mimeType || mime || "audio/mp4");
       recorderRef.current = rec;
+      discardRef.current = false;
       rec.start(1000);
       recordStartRef.current = Date.now();
+      if (autoListenRef.current) startVad(stream);
       setElapsed(0);
       timerRef.current = window.setInterval(() => {
         const ms = Date.now() - recordStartRef.current;
@@ -211,6 +290,12 @@ export function InterviewPage() {
     releaseMic();
     const blob = new Blob(chunksRef.current, { type: mime.split(";")[0] });
     chunksRef.current = [];
+    if (discardRef.current) {
+      discardRef.current = false;
+      setNotice("준비되시면 말하기를 눌러 주세요.");
+      setPhase("ready");
+      return;
+    }
     if (durationMs < MIN_RECORD_MS || blob.size < 1000) {
       setNotice("조금 더 길게 말씀해 주세요.");
       setPhase("ready");
@@ -222,6 +307,7 @@ export function InterviewPage() {
       if (r.not_heard) {
         setNotice(r.message ?? "잘 못 들었어요. 다시 한 번 말씀해 주시겠어요?");
         setPhase("ready");
+        if (autoListenRef.current) window.setTimeout(() => { if (phaseRef.current === "ready") startRecording(); }, 1200);
         return;
       }
       setHerText(r.her_text ?? null);
@@ -278,6 +364,7 @@ export function InterviewPage() {
       setQuestion(s.question);
       setNotice("다시 말씀해 주세요.");
       setPhase("ready");
+      if (autoListenRef.current) window.setTimeout(() => { if (phaseRef.current === "ready") startRecording(); }, 800);
     } catch (e) {
       showError(e);
       setPhase("ready");
@@ -306,10 +393,31 @@ export function InterviewPage() {
     }
   };
 
+  afterQuestionRef.current = () => {
+    if (autoListenRef.current && !typing) startRecording();
+    else setPhase("ready");
+  };
+
+  const toggleAutoListen = () => {
+    const next = !autoListen;
+    setAutoListen(next);
+    try { localStorage.setItem("interview-auto-listen", next ? "on" : "off"); } catch { /* ignore */ }
+    if (!next) stopVad();
+  };
+
+  // Big button reacts the moment a finger touches it (a firm press on iPhone can
+  // otherwise turn into a long-press and never register as a tap).
+  const onMicPress = (e: React.PointerEvent) => {
+    e.preventDefault();
+    if (phaseRef.current === "thinking") return;
+    if (phaseRef.current === "recording") stopRecording();
+    else startRecording();
+  };
+
   const replay = () => {
     if (!question?.audio_url) return;
     const a = getAudio();
-    a.onended = () => { if (phaseRef.current === "speaking") setPhase("ready"); };
+    a.onended = () => { if (phaseRef.current === "speaking") afterQuestionRef.current(); };
     a.src = question.audio_url;
     setNeedsTapToPlay(false);
     setPhase("speaking");
@@ -317,7 +425,7 @@ export function InterviewPage() {
   };
 
   // Clean up on unmount.
-  useEffect(() => () => { stopTimer(); releaseMic(); stopAudio(); }, []);
+  useEffect(() => () => { stopTimer(); releaseMic(); stopAudio(); audioCtxRef.current?.close().catch(() => {}); }, []);
 
   // ── Render ──
   const honorific = state?.subject.honorific ?? "어머니";
@@ -371,7 +479,9 @@ export function InterviewPage() {
           </button>
           {error && <p className="text-xl text-[#b04a4a]">{error}</p>}
           <p className="text-lg text-[#7a7160] leading-relaxed">
-            질문을 들으시고, 큰 동그라미 버튼을<br />눌러서 편하게 말씀하시면 돼요.
+            {autoListen
+              ? <>질문이 끝나면 바로 들을게요.<br />편하게 말씀하시고, 다 하시면 잠깐 쉬세요.</>
+              : <>질문을 들으시고, 큰 동그라미 버튼을<br />눌러서 편하게 말씀하시면 돼요.</>}
           </p>
           <SwitchAccount onClick={resetSignIn} />
         </div>
@@ -457,11 +567,14 @@ export function InterviewPage() {
         ) : (
           <>
             <button
-              onClick={recording ? stopRecording : startRecording}
+              onPointerDown={onMicPress}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (recording) stopRecording(); else startRecording(); } }}
+              onContextMenu={(e) => e.preventDefault()}
               disabled={thinking}
               aria-label={recording ? "다 했어요" : "말하기"}
+              style={{ WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none", touchAction: "manipulation" }}
               className={`relative w-40 h-40 rounded-full flex flex-col items-center justify-center gap-1 text-white shadow-xl transition-all active:scale-95 disabled:opacity-40 ${
-                recording ? "bg-[#c95a5a]" : "bg-[#b0642e]"
+                recording ? "bg-[#c95a5a]" : "bg-[#8a8378]"
               }`}
             >
               {recording && <span className="absolute inset-0 rounded-full bg-[#c95a5a] animate-ping opacity-30" />}
@@ -469,11 +582,21 @@ export function InterviewPage() {
               <span className="text-2xl font-semibold">{recording ? "다 했어요" : "말하기"}</span>
             </button>
             <p className="text-lg text-[#5c5447] h-7">
-              {recording ? `${mm}:${ss}  말씀하세요…` : thinking ? "" : speaking ? "" : "누르고 말씀하세요"}
+              {recording
+                ? (silenceLeft !== null
+                    ? `${silenceLeft}초 뒤에 넘어가요…`
+                    : autoListen
+                      ? (heardVoice ? `${mm}:${ss}  듣고 있어요…` : "말씀하세요. 듣고 있어요…")
+                      : `${mm}:${ss}  말씀하세요…`)
+                : thinking || speaking ? "" : "누르고 말씀하세요"}
             </p>
           </>
         )}
       </div>
+
+      {recording && autoListen && (
+        <p className="text-center text-base text-[#7a7160] pb-3">다 말씀하시면 잠깐 쉬세요. 알아서 넘어가요.</p>
+      )}
 
       {/* Bottom actions */}
       {!recording && (
@@ -489,6 +612,9 @@ export function InterviewPage() {
           <div className="flex items-center justify-between">
             <button onClick={() => setTyping(true)} disabled={thinking} className="px-2 py-3 text-lg text-[#7a7160] inline-flex items-center gap-2 disabled:opacity-40">
               <Keyboard size={20} /> 글로 쓰기
+            </button>
+            <button onClick={toggleAutoListen} className="px-2 py-3 text-base text-[#7a7160]">
+              자동 듣기 {autoListen ? "켜짐" : "꺼짐"}
             </button>
             {confirmEnd ? (
               <div className="flex items-center gap-2">
