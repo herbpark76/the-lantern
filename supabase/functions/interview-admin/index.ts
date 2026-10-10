@@ -24,6 +24,8 @@ Deno.serve(async (req: Request) => {
 
     if (body.action === "create_subject") {
       const email = (body.email ?? "").trim().toLowerCase();
+      // Same rule as the Studio form: "Last Exit" → "last-exit".
+      body.story_slug = (body.story_slug ?? "").trim().toLowerCase().replace(/[\s_]+/g, "-").replace(/[^a-z0-9-]/g, "").replace(/-{2,}/g, "-").replace(/^-|-$/g, "");
       if (!email || !body.display_name || !body.story_slug) return jsonError(400, "email, display_name and story_slug are required");
 
       // Find an existing account with this email, or create one (already confirmed).

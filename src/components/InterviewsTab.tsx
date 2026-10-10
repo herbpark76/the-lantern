@@ -114,7 +114,9 @@ function NewSubjectForm({ onCreated }: { onCreated: (id: string) => void }) {
         <Field label="Password (new accounts only)"><input className="input-field !py-2" type="text" value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
         <Field label="Display name"><input className="input-field !py-2" value={name} onChange={(e) => setName(e.target.value)} /></Field>
         <Field label="How the interviewer addresses them"><input className="input-field !py-2" value={honorific} onChange={(e) => setHonorific(e.target.value)} /></Field>
-        <Field label="Book (story slug)"><input className="input-field !py-2" value={slug} onChange={(e) => setSlug(e.target.value)} /></Field>
+        <Field label="Book (story slug — becomes the link, e.g. last-exit)">
+          <input className="input-field !py-2" value={slug} onChange={(e) => setSlug(toSlug(e.target.value))} placeholder="last-exit" />
+        </Field>
       </div>
       <div className="flex items-center gap-3">
         <button className="btn-primary !py-2" disabled={busy || !email || !name || !slug} onClick={submit}>
@@ -460,6 +462,11 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       {children}
     </label>
   );
+}
+
+// Lowercase letters, numbers and hyphens only, so it works cleanly in links and file paths.
+function toSlug(v: string): string {
+  return v.toLowerCase().replace(/[\s_]+/g, "-").replace(/[^a-z0-9-]/g, "").replace(/-{2,}/g, "-");
 }
 
 function minutes(s: InterviewSession): number {

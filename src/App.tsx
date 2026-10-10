@@ -11,12 +11,18 @@ import { ShelfPage } from "@/pages/Shelf";
 import { StudioPage } from "@/pages/Studio";
 import { InterviewPage } from "@/pages/Interview";
 
+// "/interview/last%20exit" → "last exit"
+function decodeSegment(seg: string | undefined): string | undefined {
+  if (!seg) return seg;
+  try { return decodeURIComponent(seg); } catch { return seg; }
+}
+
 function Routes() {
   const { path } = useRouter();
   const { segments } = parsePath(path);
 
   // Interview Mode is a full-screen, nav-free page. /interview/<slug> picks one of several interviews.
-  if (segments[0] === "interview") return <InterviewPage slug={segments[1]} />;
+  if (segments[0] === "interview") return <InterviewPage slug={decodeSegment(segments[1])} />;
 
   let page: React.ReactNode;
 
