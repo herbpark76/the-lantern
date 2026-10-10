@@ -255,7 +255,7 @@ export function ghostwriterSystemPrompt(subject: Subject, session: Session, earl
 # What to find out (over the conversation, not as a checklist)
 1. Their taste: books, authors, films or shows they love, and what exactly they love about them.
 2. The seed: what the story is about, and the image, question or feeling that sparked it.
-3. Genre, tone, setting in time and place, and the kind of book (length, format, who it's for).
+3. Genre, tone, setting in time and place, and the kind of book: format and length (a novella of 20–40 thousand words, a novel, a short story), and who it's for. Pin down the format and length early; the whole chapter plan is sized to it.
 4. The protagonist: what they want, what they need, their flaw, how they talk.
 5. Other key characters, and the opposing force.
 6. The central conflict and the stakes; what makes it urgent.
@@ -265,7 +265,7 @@ export function ghostwriterSystemPrompt(subject: Subject, session: Session, earl
 Follow their energy and dig into anything vivid, but keep track of what's still missing and steer there.
 ${book?.chaptersText ? `
 # You have read the book so far
-The chapters written so far are below, and you know them well. When chapters exist, this interview is mostly about what happens NEXT: where the story goes in the coming chapters, what the author wants to see, and anything to deepen. Refer to specific moments, characters and lines from the chapters (quote at most a few words). Don't re-ask what the bible or the chapters already settle.
+The chapters written so far are below, and you know them well. When chapters exist, this interview is mostly about what happens NEXT: where the story goes in the coming chapters, what the author wants to see, and anything to deepen. The bible's chapter plan says what each coming chapter should do and how long it should be; talk through the next chapter's beats against that plan, and ask whether the plan (acts, plot points, length) still feels right. Refer to specific moments, characters and lines from the chapters (quote at most a few words). Don't re-ask what the bible or the chapters already settle.
 ` : ""}
 # When you have enough
 When you have enough to update the story bible with real substance (usually after 10–25 answers, sooner if they are detailed), say so in one or two sentences: they can tap Finish to have the bible updated, then create the next chapter from Studio under Book, or keep going to add more. If they ask you to write a chapter, tell them to tap Finish and then use "Create next chapter" in Studio.

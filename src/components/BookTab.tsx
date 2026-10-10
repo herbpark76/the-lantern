@@ -27,6 +27,11 @@ export interface BookDoc {
   final_model_id?: string;
   generating?: boolean;
   gen_error?: string | null;
+  /** On the story bible: the plan of the whole book. */
+  plan?: {
+    format?: string; target_words?: number;
+    chapters?: Array<{ n: number; title?: string; act?: number; target_words?: number; purpose?: string }>;
+  } | null;
   published?: boolean;
   updated_at: string;
 }
@@ -163,6 +168,18 @@ export function BookTab() {
     await loadDocs();
   };
 
+  const buildPlan = async () => {
+    if (!slug) return;
+    setWriting(true); setMsg(null);
+    try {
+      const r = await interviewApi.replan(slug);
+      await loadDocs();
+      setKind("summary");
+      setDocId(r.bible_id);
+    } catch (e) { setMsg((e as Error).message); }
+    setWriting(false);
+  };
+
   const createChapter = async (chapterId?: string) => {
     if (!slug) return;
     setWriting(true); setMsg(null);
@@ -174,6 +191,14 @@ export function BookTab() {
     } catch (e) { setMsg((e as Error).message); }
     setWriting(false);
   };
+
+  // The book plan (on the bible) and where this chapter sits in it.
+  const plan = summaries.find((d) => d.id.endsWith("/bible"))?.plan ?? null;
+  const planned = plan?.chapters ?? [];
+  const nextNo = chapters.reduce((m, c) => Math.max(m, c.position), 0) + 1;
+  const nextPlan = planned.find((c) => Number(c.n) === nextNo);
+  const docPlan = kind === "sample" && doc ? planned.find((c) => Number(c.n) === doc.position) : undefined;
+  const wordCount = (t: string) => (t.match(/\S+/g) ?? []).length;
 
   const idx = chapters.findIndex((c) => c.id === doc?.id);
   const goChapter = (d: number) => {
@@ -272,15 +297,30 @@ export function BookTab() {
                 className="btn-secondary !py-2 !px-3 text-sm inline-flex items-center gap-1.5">
                 <MessageSquare size={15} /> {kind === "sample" ? "Revise this chapter" : "Give notes on the bible"}
               </a>
+              {kind === "summary" && (
+                <button onClick={buildPlan} disabled={writing} className="btn-secondary !py-2 !px-3 text-sm inline-flex items-center gap-1.5"
+                  title="Rebuild the three-act structure, plot points and chapter-by-chapter plan from the current bible">
+                  <Sparkles size={15} /> {plan ? "Rebuild chapter plan" : "Build chapter plan"}
+                </button>
+              )}
               {kind === "sample" && (
                 <button onClick={() => createChapter()} disabled={writing}
                   className="btn-primary !py-2 !px-3 text-sm inline-flex items-center gap-1.5">
-                  <Sparkles size={15} /> Create next chapter
+                  <Sparkles size={15} /> {nextPlan ? `Create Chapter ${nextNo}${nextPlan.title ? `: ${nextPlan.title}` : ""}` : "Create next chapter"}
                 </button>
               )}
             </span>
           )}
         </div>
+      )}
+
+      {kind === "sample" && doc && !doc.generating && (docPlan || planned.length > 0) && (
+        <p className="text-xs text-ink-500 font-sans -mt-2">
+          {docPlan
+            ? <>Act {docPlan.act ?? "?"} · planned ~{(docPlan.target_words ?? 0).toLocaleString()} words · written {wordCount(shown === "en" ? doc.body_en : doc.body_ko).toLocaleString()} words{docPlan.purpose ? ` · ${docPlan.purpose}` : ""}</>
+            : <>Not in the current chapter plan</>}
+          {planned.length > 0 && <> · chapter {doc.position} of {planned.length} planned{plan?.format ? ` (${plan.format}, ~${(plan.target_words ?? 0).toLocaleString()} words)` : ""}</>}
+        </p>
       )}
 
       {englishOnly && kind === "sample" && ofKind.length === 0 && (
@@ -304,10 +344,21 @@ export function BookTab() {
       )}
       {msg && <p className="text-sm text-ink-600 dark:text-ink-300 font-sans">{msg}</p>}
 
+      {kind === "sample" && englishOnly && chapters.length > 0 && !plan && (
+        <p className="text-xs text-warning-600 font-sans -mt-2">
+          This book has no chapter plan yet, so new chapters only follow the bible loosely.{" "}
+          <button onClick={buildPlan} disabled={writing} className="underline">Build the chapter plan</button> first.
+        </p>
+      )}
+
       {doc?.generating ? (
         <div className="card px-6 py-12 text-center font-sans space-y-2">
           <Loader2 size={24} className="animate-spin text-accent-500 mx-auto" />
-          <p className="text-ink-700 dark:text-ink-200">Writing {titleOf(doc, shown)} from the story bible and the chapters before it…</p>
+          <p className="text-ink-700 dark:text-ink-200">
+            {doc.kind === "summary"
+              ? "Building the structure and chapter plan from the bible and the chapters so far…"
+              : `Writing ${titleOf(doc, shown)} from its brief in the chapter plan and the chapters before it…`}
+          </p>
           <p className="text-sm text-ink-500">This usually takes 2–4 minutes. You can leave this page; it keeps going.</p>
         </div>
       ) : doc?.gen_error && !(shown === "en" ? doc.body_en : doc.body_ko)?.trim() ? (

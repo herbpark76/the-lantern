@@ -145,6 +145,39 @@ Deno.serve(async (req: Request) => {
       return json({ chapter_id: chapterId });
     }
 
+    // Rebuild the bible's structure and chapter plan without an interview: { action: "replan", story_slug }
+    if (body.action === "replan") {
+      const slug = String(body.story_slug ?? "");
+      const bibleId = `${slug}/bible`;
+      const { data: subj } = await db.from("interview_subjects").select("*")
+        .eq("story_slug", slug).eq("mode", "ghostwriter").order("created_at").limit(1).maybeSingle();
+      const subject = subj as Subject | null;
+      if (!subject) return jsonError(404, "This book has no ghostwriter interview");
+      const { data: existing } = await db.from("book_docs").select("id, generating").eq("id", bibleId).maybeSingle();
+      if ((existing as { generating?: boolean } | null)?.generating) return jsonError(409, "The plan is already being built.");
+      if (existing) {
+        await db.from("book_docs").update({ generating: true, gen_error: null }).eq("id", bibleId);
+      } else {
+        // First living bible: start from the newest session bible.
+        const { data: latest } = await db.from("book_docs").select("body_en, body_ko").eq("story_slug", slug).eq("kind", "summary")
+          .order("updated_at", { ascending: false }).limit(1).maybeSingle();
+        const l = latest as { body_en: string; body_ko: string } | null;
+        const lang = subject.language === "ko" ? "ko" : "en";
+        await db.from("book_docs").insert({
+          id: bibleId, story_slug: slug, kind: "summary", position: 0,
+          [`title_${lang}`]: "Story Bible", body_en: l?.body_en ?? "", body_ko: l?.body_ko ?? "",
+          [`voice_${lang}`]: subject.tts_voice_id, generating: true,
+        });
+      }
+      const p = fetch(`${SUPABASE_URL}/functions/v1/interview-finish`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "replan", story_slug: slug }),
+      }).catch((e) => console.error("[interview-admin] replan trigger failed", e));
+      if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(p);
+      return json({ ok: true, bible_id: bibleId });
+    }
+
     // The voices in the ElevenLabs account, for the voice dropdowns in Studio.
     if (body.action === "list_voices") {
       if (!ELEVENLABS_API_KEY) return jsonError(503, "ELEVENLABS_API_KEY is not configured");
