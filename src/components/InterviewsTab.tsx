@@ -283,10 +283,10 @@ function SessionDetail({ session, subject, onBack, onChanged }: {
 
   const regenerate = async () => {
     setBusy("regen");
-    setMsg(null);
+    setMsg("Writing the translation and summary — this can take a minute or two…");
     try {
       const r = await interviewApi.regenerate(session.id);
-      setMsg(r.github_error ? `Summary saved, but GitHub commit failed: ${r.github_error}` : "Summary regenerated and committed.");
+      setMsg(r.github_error ? `Summary saved, but GitHub commit failed: ${r.github_error}` : `Summary written and saved to GitHub${r.github_path ? `: ${r.github_path}` : ""}.`);
       onChanged();
     } catch (e) { setMsg((e as InterviewError).message); }
     setBusy(null);
@@ -312,11 +312,10 @@ function SessionDetail({ session, subject, onBack, onChanged }: {
         </div>
         <div className="flex items-center gap-2">
           <StatusBadge session={session} />
-          {session.status !== "active" && (
-            <button className="btn-secondary !py-1.5 !px-3" onClick={regenerate} disabled={!!busy}>
-              {busy === "regen" ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} {session.summary_en ? "Regenerate" : "Write summary"}
-            </button>
-          )}
+          <button className="btn-secondary !py-1.5 !px-3" onClick={regenerate} disabled={!!busy}>
+            {busy === "regen" ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+            {session.status === "active" ? "End & write summary" : session.summary_en ? "Regenerate" : "Write summary"}
+          </button>
           {confirmDelete ? (
             <>
               <button className="btn-secondary !py-1.5 !px-3 !text-error-600" onClick={remove} disabled={!!busy}>Delete for good</button>
