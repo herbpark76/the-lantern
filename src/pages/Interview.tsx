@@ -19,7 +19,7 @@ const MAX_RECORD_MS = 5 * 60 * 1000;
 const MIN_RECORD_MS = 700;
 
 export function InterviewPage() {
-  const { session: authSession, loading: authLoading } = useAuth();
+  const { session: authSession, loading: authLoading, signOut } = useAuth();
 
   const [phase, setPhase] = useState<Phase>("loading");
   const [state, setState] = useState<InterviewState | null>(null);
@@ -58,6 +58,8 @@ export function InterviewPage() {
     interviewApi.state()
       .then((s) => { setState(s); setQuestion(s.question); setPhase("welcome"); })
       .catch((e: InterviewError) => {
+        // Expired or invalid sign-in: sign out so the login form shows.
+        if (e.status === 401) { signOut(); return; }
         if (e.code === "no_subject") setNoSubject(true);
         else setError(e.message);
         setPhase("welcome");
@@ -142,6 +144,7 @@ export function InterviewPage() {
       setHerText(s.last_answer);
       playQuestion(s.question);
     } catch (e) {
+      if ((e as InterviewError).status === 401) { signOut(); return; }
       showError(e);
       setPhase("welcome");
     }
@@ -323,6 +326,7 @@ export function InterviewPage() {
         <div className="flex-1 flex flex-col items-center justify-center text-center gap-4 px-2">
           <p className="text-3xl font-semibold">아직 준비 중이에요</p>
           <p className="text-xl text-[#5c5447]">아드님께 말씀해 주세요.</p>
+          <SwitchAccount onClick={() => { setNoSubject(false); signOut(); }} />
         </div>
       </Shell>
     );
@@ -349,6 +353,7 @@ export function InterviewPage() {
           <p className="text-lg text-[#7a7160] leading-relaxed">
             질문을 들으시고, 큰 동그라미 버튼을<br />눌러서 편하게 말씀하시면 돼요.
           </p>
+          <SwitchAccount onClick={() => signOut()} />
         </div>
       </Shell>
     );
@@ -496,6 +501,14 @@ function Shell({ children }: { children: React.ReactNode }) {
         {children}
       </div>
     </div>
+  );
+}
+
+function SwitchAccount({ onClick }: { onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="mt-6 text-base text-[#a89f8e] underline underline-offset-4">
+      다른 계정으로 들어가기
+    </button>
   );
 }
 

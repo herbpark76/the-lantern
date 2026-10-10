@@ -125,7 +125,9 @@ Deno.serve(async (req: Request) => {
 
     if (!skip_github) {
       const nn = String(session.session_no).padStart(2, "0");
-      const path = `interviews/${subject.story_slug}/session-${nn}.md`;
+      // One folder per person, so a test person never overwrites the real interviews.
+      const person = (subject.display_name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || subject.id.slice(0, 8);
+      const path = `interviews/${subject.story_slug}/${person}/session-${nn}.md`;
       const date = new Date(session.started_at).toISOString().slice(0, 10);
       const minutes = Math.round((new Date(String(update.ended_at)).getTime() - new Date(session.started_at).getTime()) / 60000);
       const md = `# Interview session ${nn}: ${ERAS[session.era]?.label ?? session.era}
