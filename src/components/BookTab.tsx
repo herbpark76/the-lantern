@@ -23,6 +23,7 @@ export interface BookDoc {
   voice_en: string;
   voice_ko: string;
   model_id?: string;
+  final_model_id?: string;
   published?: boolean;
   updated_at: string;
 }
@@ -330,7 +331,7 @@ function PublishPanel({ slug, story, chapters, bible, lang, onDone }: {
         <div>
           <h3 className="font-serif text-lg text-ink-900 dark:text-ink-50">{live ? "Published in the Library" : "Publish to the Library"}</h3>
           <p className="text-sm text-ink-500 mt-1">
-            Anyone can read the chapters you tick, with narration once it's recorded here.
+            Anyone can read the chapters you tick. They hear the final narration, once it's recorded below.
             {live && <> Reader link: <a href={`/book/${slug}`} target="_blank" rel="noreferrer" className="text-accent-600 underline">/book/{slug}</a></>}
           </p>
         </div>
@@ -357,6 +358,7 @@ function PublishPanel({ slug, story, chapters, bible, lang, onDone }: {
           </div>
         </div>
       </div>
+      <FinalNarration slug={slug} chapters={chapters.filter((c) => picked.includes(c.id))} lang={lang} onChanged={onDone} />
       <div className="flex flex-wrap items-center gap-3">
         <button className="btn-primary !py-2" onClick={publish} disabled={busy || !title.trim() || !picked.length}>
           {busy ? <Loader2 size={15} className="animate-spin" /> : <Globe size={15} />} {live ? "Update" : "Publish"}
@@ -381,9 +383,94 @@ function KindButton({ active, onClick, icon, children }: { active: boolean; onCl
   );
 }
 
+// ── Final narration (what readers of the published book hear) ───────────
+
+function FinalNarration({ slug, chapters, lang, onChanged }: { slug: string; chapters: BookDoc[]; lang: Lang; onChanged: () => void }) {
+  const [model, setModel] = useState(chapters[0]?.final_model_id ?? "eleven_v4");
+  const [stats, setStats] = useState<Record<string, AudioStatus>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const cancelRef = useRef(false);
+  const ids = chapters.map((c) => c.id).join(",");
+
+  const refresh = useCallback(async () => {
+    const out: Record<string, AudioStatus> = {};
+    for (const c of chapters) {
+      try { out[c.id] = await audioCall({ action: "status", id: c.id, lang, track: "final" }); } catch { /* skip */ }
+    }
+    setStats(out);
+  }, [ids, lang]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { cancelRef.current = false; refresh(); return () => { cancelRef.current = true; }; }, [refresh]);
+
+  const changeModel = async (m: string) => {
+    setModel(m);
+    const { error: e } = await supabase.from("book_docs").update({ final_model_id: m }).eq("story_slug", slug).eq("kind", "sample");
+    if (e) { setError(e.message); return; }
+    onChanged();
+    refresh();
+  };
+
+  const recordAll = async () => {
+    setError(null);
+    for (const c of chapters) {
+      if (cancelRef.current) break;
+      setBusy(c.id);
+      try {
+        let st = await audioCall({ action: "status", id: c.id, lang, track: "final" });
+        setStats((s) => ({ ...s, [c.id]: st }));
+        while (!cancelRef.current && st.ready < st.total) {
+          st = await audioCall({ action: "generate", id: c.id, lang, track: "final" });
+          setStats((s) => ({ ...s, [c.id]: st }));
+        }
+      } catch (e) { setError(`${titleOf(c, lang)}: ${(e as Error).message}`); break; }
+    }
+    setBusy(null);
+  };
+
+  const done = (c: BookDoc) => { const s = stats[c.id]; return !!s && s.total > 0 && s.ready === s.total; };
+  const allDone = chapters.length > 0 && chapters.every(done);
+
+  return (
+    <div className="rounded-lg border border-ink-200 dark:border-ink-700 p-4 space-y-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <Headphones size={16} className="text-accent-500" />
+        <span className="text-sm font-medium text-ink-800 dark:text-ink-100">Final narration</span>
+        <span className="text-xs text-ink-500">What readers hear. Separate from the Studio draft narration.</span>
+        <select value={model} onChange={(e) => changeModel(e.target.value)} className="input-field !py-1 !px-2 !w-auto text-xs ml-auto" disabled={!!busy}>
+          {TTS_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+        </select>
+      </div>
+      <ul className="space-y-1 text-sm">
+        {chapters.map((c) => {
+          const s = stats[c.id];
+          return (
+            <li key={c.id} className="flex items-center gap-2 text-ink-700 dark:text-ink-200">
+              {busy === c.id ? <Loader2 size={13} className="animate-spin text-accent-500" />
+                : done(c) ? <span className="text-success-600">✓</span> : <span className="text-ink-300">○</span>}
+              <span className="flex-1">{titleOf(c, lang)}</span>
+              <span className="text-xs text-ink-400">
+                {!s ? "…" : done(c) ? "recorded" : s.stale ? "out of date" : s.ready ? `${s.ready} of ${s.total} parts` : "not recorded"}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+      <div className="flex items-center gap-3">
+        <button className="btn-secondary !py-1.5 !px-3 text-sm" onClick={recordAll} disabled={!!busy || allDone || !chapters.length}>
+          {busy ? <Loader2 size={14} className="animate-spin" /> : <Headphones size={14} />}
+          {allDone ? "All recorded" : busy ? "Recording…" : "Record final narration"}
+        </button>
+        {error && <span className="text-xs text-error-600">{error}</span>}
+      </div>
+    </div>
+  );
+}
+
 // ── Audio ────────────────────────────────────────────────────────────────
 
 export function AudioBar({ doc, lang, readOnly = false, onChanged }: { doc: BookDoc; lang: Lang; readOnly?: boolean; onChanged?: () => void }) {
+  // Studio plays the draft narration; the public reader plays the final recording.
+  const track = readOnly ? "final" : "draft";
   // Narration model for this page (Studio only). Changing it means the narration is recorded again.
   const [model, setModel] = useState(doc.model_id ?? "eleven_v3");
   const changeModel = async (m: string) => {
@@ -412,12 +499,12 @@ export function AudioBar({ doc, lang, readOnly = false, onChanged }: { doc: Book
 
   useEffect(() => {
     cancelRef.current = false;
-    audioCall({ action: "status", id: doc.id, lang }).then(setStatus).catch((e) => setError(e.message));
+    audioCall({ action: "status", id: doc.id, lang, track }).then(setStatus).catch((e) => setError(e.message));
     return () => {
       cancelRef.current = true;
       audioRef.current?.pause();
     };
-  }, [doc.id, lang]);
+  }, [doc.id, lang, track]);
 
   const ready = status && status.total > 0 && status.ready === status.total && status.urls.length === status.total;
 
@@ -425,18 +512,18 @@ export function AudioBar({ doc, lang, readOnly = false, onChanged }: { doc: Book
     setBusy(true);
     setError(null);
     try {
-      if (fresh) await audioCall({ action: "reset", id: doc.id, lang });
-      let st = await audioCall({ action: "status", id: doc.id, lang });
+      if (fresh) await audioCall({ action: "reset", id: doc.id, lang, track });
+      let st = await audioCall({ action: "status", id: doc.id, lang, track });
       setStatus(st);
       while (!cancelRef.current && st.ready < st.total) {
-        st = await audioCall({ action: "generate", id: doc.id, lang });
+        st = await audioCall({ action: "generate", id: doc.id, lang, track });
         setStatus(st);
       }
     } catch (e) {
       setError((e as Error).message);
     }
     setBusy(false);
-  }, [doc.id, lang]);
+  }, [doc.id, lang, track]);
 
   const playPart = (n: number) => {
     if (!status?.urls[n]) return;
@@ -470,7 +557,7 @@ export function AudioBar({ doc, lang, readOnly = false, onChanged }: { doc: Book
 
   const voiceId = lang === "ko" ? doc.voice_ko : doc.voice_en;
   const voiceName = voiceId === "UzElYEdLTwdjry68bt1c" ? "Daegu voice" : voiceId === "kNjmAhXxYgxjF0oyxw4c" ? "Matthew" : "Narrator";
-  const voiceLabel = `${voiceName} · ${lang === "ko" ? "한국어" : "English"}`;
+  const voiceLabel = `${voiceName} · ${lang === "ko" ? "한국어" : "English"}${readOnly ? "" : " · Studio draft"}`;
 
   return (
     <div className="card px-4 py-3 flex flex-wrap items-center gap-3 font-sans">

@@ -1,5 +1,7 @@
 // Narrated audio for book_docs (sample chapters, session summaries).
 //
+// Every call may add track: "draft" (Studio narration, default) or "final" (what readers of a
+// published book hear, recorded with final_model_id). Public (signed-out) listeners get "final".
 // POST { action: "status", id, lang }    → { total, ready, urls[] }   (staff or the book's interview subject)
 // POST { action: "generate", id, lang }  → makes the NEXT missing part, returns status (staff only)
 // POST { action: "reset", id, lang }     → forget generated audio so it is made fresh (staff only)
@@ -25,6 +27,9 @@ interface BookDoc {
   speed: number;
   audio_en: AudioState | null;
   audio_ko: AudioState | null;
+  final_model_id?: string | null;
+  audio_final_en?: AudioState | null;
+  audio_final_ko?: AudioState | null;
   published?: boolean;
 }
 
@@ -83,17 +88,28 @@ async function load(db: SupabaseClient, id: string): Promise<BookDoc | null> {
   return data as BookDoc | null;
 }
 
-async function plan(doc: BookDoc, lang: "en" | "ko") {
-  const text = toSpeechText(lang === "en" ? doc.body_en : doc.body_ko);
-  const voice = lang === "en" ? doc.voice_en : doc.voice_ko;
-  const parts = splitParts(text);
-  const hash = await sha(`${voice}|${doc.model_id}|${doc.speed}|${text}`);
-  return { parts, voice, hash };
+type Track = "draft" | "final";
+
+function trackCol(lang: "en" | "ko", track: Track): "audio_en" | "audio_ko" | "audio_final_en" | "audio_final_ko" {
+  return track === "final" ? (lang === "en" ? "audio_final_en" : "audio_final_ko") : (lang === "en" ? "audio_en" : "audio_ko");
 }
 
-async function status(db: SupabaseClient, doc: BookDoc, lang: "en" | "ko") {
-  const { parts, hash } = await plan(doc, lang);
-  const st = (lang === "en" ? doc.audio_en : doc.audio_ko);
+function trackModel(doc: BookDoc, track: Track): string {
+  return track === "final" ? (doc.final_model_id || "eleven_v4") : doc.model_id;
+}
+
+async function plan(doc: BookDoc, lang: "en" | "ko", track: Track) {
+  const text = toSpeechText(lang === "en" ? doc.body_en : doc.body_ko);
+  const voice = lang === "en" ? doc.voice_en : doc.voice_ko;
+  const model = trackModel(doc, track);
+  const parts = splitParts(text);
+  const hash = await sha(`${voice}|${model}|${doc.speed}|${text}`);
+  return { parts, voice, model, hash };
+}
+
+async function status(db: SupabaseClient, doc: BookDoc, lang: "en" | "ko", track: Track) {
+  const { parts, hash, model } = await plan(doc, lang, track);
+  const st = doc[trackCol(lang, track)] ?? null;
   const valid = st && st.hash === hash ? st : null;
   const paths = valid ? valid.parts : [];
   const ready = paths.filter(Boolean).length;
@@ -102,7 +118,7 @@ async function status(db: SupabaseClient, doc: BookDoc, lang: "en" | "ko") {
     const { data } = await db.storage.from(BUCKET).createSignedUrls(paths as string[], 60 * 60 * 6);
     urls = (data ?? []).map((d) => d.signedUrl ?? "");
   }
-  return { total: parts.length, ready, urls, stale: !!st && !valid };
+  return { total: parts.length, ready, urls, stale: !!st && !valid, model, track };
 }
 
 Deno.serve(async (req: Request) => {
@@ -114,7 +130,8 @@ Deno.serve(async (req: Request) => {
     const db = admin();
     const staff = user ? await isStaffUser(db, user.id) : false;
 
-    const { action = "status", id, lang } = await req.json().catch(() => ({}));
+    const { action = "status", id, lang, track: rawTrack } = await req.json().catch(() => ({}));
+    const track: Track = rawTrack === "final" ? "final" : "draft";
     if (!id || (lang !== "en" && lang !== "ko")) return jsonError(400, "id and lang (en|ko) are required");
     const doc = await load(db, id);
     if (!doc) return jsonError(404, "Not found");
@@ -122,7 +139,7 @@ Deno.serve(async (req: Request) => {
     // Anyone may listen to a published chapter of a published book.
     if (!staff && action === "status" && doc.published) {
       const { data: story } = await db.from("stories").select("status").eq("slug", doc.story_slug).maybeSingle();
-      if ((story as { status?: string } | null)?.status === "published") return json(await status(db, doc, lang));
+      if ((story as { status?: string } | null)?.status === "published") return json(await status(db, doc, lang, "final"));
     }
 
     if (!user) return jsonError(401, "Authentication required");
@@ -133,9 +150,9 @@ Deno.serve(async (req: Request) => {
       if (action !== "status") return jsonError(403, "Staff only");
     }
 
-    const col = lang === "en" ? "audio_en" : "audio_ko";
+    const col = trackCol(lang, track);
 
-    if (action === "status") return json(await status(db, doc, lang));
+    if (action === "status") return json(await status(db, doc, lang, track));
 
     if (action === "reset") {
       await db.from("book_docs").update({ [col]: null }).eq("id", id);
@@ -144,8 +161,8 @@ Deno.serve(async (req: Request) => {
 
     if (action === "generate") {
       if (!ELEVENLABS_API_KEY) return jsonError(503, "ELEVENLABS_API_KEY is not configured");
-      const { parts, voice, hash } = await plan(doc, lang);
-      const prev = lang === "en" ? doc.audio_en : doc.audio_ko;
+      const { parts, voice, model, hash } = await plan(doc, lang, track);
+      const prev = doc[col] ?? null;
       const st: AudioState = prev && prev.hash === hash && prev.parts.length === parts.length
         ? prev
         : { hash, total: parts.length, parts: parts.map(() => null) };
@@ -157,7 +174,7 @@ Deno.serve(async (req: Request) => {
           headers: { "Content-Type": "application/json", "xi-api-key": ELEVENLABS_API_KEY },
           body: JSON.stringify({
             text: parts[n],
-            model_id: doc.model_id,
+            model_id: model,
             voice_settings: { stability: 0.6, similarity_boost: 0.8, style: 0.2, speed: Number(doc.speed) || 1 },
           }),
         });
@@ -168,14 +185,14 @@ Deno.serve(async (req: Request) => {
           try { reason = JSON.parse(err)?.detail?.message ?? err; } catch { /* raw */ }
           return jsonError(502, `Text-to-speech ${resp.status}: ${String(reason).slice(0, 160)}`);
         }
-        const path = `books/${doc.id.replace(/[^a-z0-9-]/gi, "_")}/${lang}/${hash}-${String(n).padStart(2, "0")}.mp3`;
+        const path = `books/${doc.id.replace(/[^a-z0-9-]/gi, "_")}/${lang}${track === "final" ? "-final" : ""}/${hash}-${String(n).padStart(2, "0")}.mp3`;
         const { error } = await db.storage.from(BUCKET).upload(path, await resp.arrayBuffer(), { contentType: "audio/mpeg", upsert: true });
         if (error) return jsonError(500, `Upload failed: ${error.message}`);
         st.parts[n] = path;
         await db.from("book_docs").update({ [col]: st }).eq("id", id);
         (doc as unknown as Record<string, unknown>)[col] = st;
       }
-      return json(await status(db, doc, lang));
+      return json(await status(db, doc, lang, track));
     }
 
     return jsonError(400, `Unknown action: ${action}`);
