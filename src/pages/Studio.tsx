@@ -10,8 +10,9 @@ import {
   MessageSquare, Send, X, Headphones, Mic,
 } from "lucide-react";
 import { InterviewsTab } from "@/components/InterviewsTab";
+import { BookTab } from "@/components/BookTab";
 
-type StudioTab = "stories" | "map" | "preview" | "queue" | "bible" | "tallies" | "directors" | "readers" | "interviews";
+type StudioTab = "stories" | "map" | "preview" | "queue" | "bible" | "tallies" | "directors" | "readers" | "interviews" | "book";
 
 export function StudioPage() {
   const { profile } = useAuth();
@@ -58,6 +59,7 @@ export function StudioPage() {
     { key: "directors", label: "Director's Cut", icon: Film },
     { key: "readers", label: "Readers", icon: Users },
     { key: "interviews", label: "Interviews", icon: Mic },
+    { key: "book", label: "Book", icon: BookOpen },
   ];
 
   return (
@@ -88,7 +90,7 @@ export function StudioPage() {
       </div>
 
       {/* Story selector for tabs that need it */}
-      {(tab !== "stories" && tab !== "queue" && tab !== "interviews") && (
+      {(tab !== "stories" && tab !== "queue" && tab !== "interviews" && tab !== "book") && (
         <div className="mb-6">
           <select
             value={selectedSlug ?? ""}
@@ -116,6 +118,7 @@ export function StudioPage() {
       {tab === "directors" && selectedSlug && <DirectorsTab slug={selectedSlug} profile={profile} />}
       {tab === "readers" && <ReadersTab stories={stories} />}
       {tab === "interviews" && <InterviewsTab />}
+      {tab === "book" && <BookTab />}
     </div>
   );
 }

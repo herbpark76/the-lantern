@@ -25,3 +25,7 @@ entrypoint = "./functions/interview-finish/index.ts"
 [functions.interview-admin]
 verify_jwt = true
 entrypoint = "./functions/interview-admin/index.ts"
+
+[functions.book-audio]
+verify_jwt = true
+entrypoint = "./functions/book-audio/index.ts"
