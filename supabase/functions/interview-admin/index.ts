@@ -6,6 +6,7 @@
 //   { action: "session_audio", session_id }   → { urls: { [turn_id]: signedUrl } }
 //   { action: "delete_session", session_id }  → removes a (test) session + its audio
 
+import { textToSpeech, type Subject } from "../_shared/interview.ts";
 import { admin, BUCKET, corsHeaders, getCaller, isStaffUser, json, jsonError, type Turn } from "../_shared/interview.ts";
 
 const MATTHEW_VOICE = "kNjmAhXxYgxjF0oyxw4c"; // English narrator voice for ghostwriter projects
@@ -102,6 +103,25 @@ Deno.serve(async (req: Request) => {
       if (on.length) await db.from("book_docs").update({ published: true }).in("id", on);
       if (off.length) await db.from("book_docs").update({ published: false }).in("id", off);
       return json({ ok: true, status: "published", published: on });
+    }
+
+    // Hear a voice/model/speed before saving it: { action: "voice_test", voice_id, model_id, speed, language, honorific? }
+    if (body.action === "voice_test") {
+      const ko = body.language === "ko";
+      const name = (body.honorific ?? "").trim();
+      const text = ko
+        ? `${name ? `${name}, ` : ""}안녕하세요. 오늘은 어린 시절 이야기를 조금 더 들려주시겠어요? 그때 살던 집은 어떤 모습이었는지 궁금해요.`
+        : `${name ? `Hi ${name}. ` : "Hi. "}I've been thinking about your story since last time. Tell me about the moment everything changed for your main character. Where were they, and what did they see?`;
+      const pseudo = { tts_voice_id: String(body.voice_id ?? "").trim(), tts_model_id: String(body.model_id ?? "").trim(), tts_speed: Number(body.speed) || 1 } as Subject;
+      if (!pseudo.tts_voice_id || !pseudo.tts_model_id) return jsonError(400, "voice_id and model_id are required");
+      try {
+        const audio = new Uint8Array(await textToSpeech(pseudo, text));
+        let bin = "";
+        for (let i = 0; i < audio.length; i += 0x8000) bin += String.fromCharCode(...audio.subarray(i, i + 0x8000));
+        return json({ audio: `data:audio/mpeg;base64,${btoa(bin)}`, text });
+      } catch (e) {
+        return jsonError(502, String((e as Error).message ?? e));
+      }
     }
 
     if (body.action === "set_password") {

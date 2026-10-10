@@ -4,7 +4,7 @@ import {
   RefreshCw, SkipBack, SkipForward,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { InterviewError, interviewApi } from "@/lib/interview";
+import { InterviewError, interviewApi, TTS_MODELS } from "@/lib/interview";
 
 // Studio > Book: read a book's sample chapters and session summaries in English or Korean,
 // and listen to them narrated (audio made on demand by the `book-audio` edge function).
@@ -22,6 +22,7 @@ export interface BookDoc {
   body_ko: string;
   voice_en: string;
   voice_ko: string;
+  model_id?: string;
   published?: boolean;
   updated_at: string;
 }
@@ -264,7 +265,7 @@ export function BookTab() {
 
       {doc ? (
         <>
-          {!version && <AudioBar key={`${doc.id}:${shown}:${doc.updated_at}`} doc={doc} lang={shown} />}
+          {!version && <AudioBar key={`${doc.id}:${shown}:${doc.updated_at}:${doc.model_id}`} doc={doc} lang={shown} onChanged={loadDocs} />}
           <article lang={shown} className="card px-6 sm:px-10 py-8">
             <Markdown text={body} lang={shown} />
           </article>
@@ -382,7 +383,21 @@ function KindButton({ active, onClick, icon, children }: { active: boolean; onCl
 
 // ── Audio ────────────────────────────────────────────────────────────────
 
-export function AudioBar({ doc, lang, readOnly = false }: { doc: BookDoc; lang: Lang; readOnly?: boolean }) {
+export function AudioBar({ doc, lang, readOnly = false, onChanged }: { doc: BookDoc; lang: Lang; readOnly?: boolean; onChanged?: () => void }) {
+  // Narration model for this page (Studio only). Changing it means the narration is recorded again.
+  const [model, setModel] = useState(doc.model_id ?? "eleven_v3");
+  const changeModel = async (m: string) => {
+    setModel(m);
+    const { error } = await supabase.from("book_docs").update({ model_id: m }).eq("id", doc.id);
+    if (error) { setModel(doc.model_id ?? "eleven_v3"); return; }
+    onChanged?.();
+  };
+  const modelPicker = readOnly ? null : (
+    <select value={model} onChange={(e) => changeModel(e.target.value)} className="input-field !py-1 !px-2 !w-auto text-xs" title="Narration model">
+      {TTS_MODELS.map((m) => <option key={m.id} value={m.id}>{m.id}</option>)}
+      {!TTS_MODELS.some((m) => m.id === model) && <option value={model}>{model}</option>}
+    </select>
+  );
   const [status, setStatus] = useState<AudioStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -472,6 +487,7 @@ export function AudioBar({ doc, lang, readOnly = false }: { doc: BookDoc; lang: 
             {[0.6, 0.7, 0.75, 0.8, 0.85, 0.9, 1, 1.1, 1.25].map((r) => <option key={r} value={r}>{r}×</option>)}
           </select>
           <span className="text-xs text-ink-400 ml-auto">{voiceLabel}</span>
+          {modelPicker}
           {!readOnly && (
             <button onClick={() => generate(true)} disabled={busy} className="btn-ghost !px-2 !py-1 text-xs" title="Re-record">
               <RefreshCw size={13} />
@@ -488,7 +504,8 @@ export function AudioBar({ doc, lang, readOnly = false }: { doc: BookDoc; lang: 
             {status?.stale ? "The text changed since the last recording." : "No narration yet."}
             {status && status.ready > 0 && status.ready < status.total ? ` ${status.ready} of ${status.total} parts recorded.` : ""}
           </span>
-          <button onClick={() => generate(false)} className="btn-primary !py-1.5 !px-3 text-sm ml-auto">
+          <span className="ml-auto">{modelPicker}</span>
+          <button onClick={() => generate(false)} className="btn-primary !py-1.5 !px-3 text-sm">
             <Headphones size={14} /> {status && status.ready > 0 && !status.stale ? "Finish recording" : "Record narration"}
           </button>
         </>

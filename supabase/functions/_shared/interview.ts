@@ -496,8 +496,11 @@ export async function textToSpeech(subject: Subject, text: string): Promise<Arra
     },
   );
   if (!resp.ok) {
-    console.error("[interview] TTS error", resp.status, await resp.text());
-    throw new Error(`TTS error ${resp.status}`);
+    const err = await resp.text();
+    console.error("[interview] TTS error", resp.status, err);
+    let reason = err;
+    try { const j = JSON.parse(err); reason = j?.detail?.message ?? j?.detail?.status ?? (typeof j?.detail === "string" ? j.detail : err); } catch { /* raw */ }
+    throw new Error(`TTS error ${resp.status}: ${String(reason).slice(0, 200)}`);
   }
   return await resp.arrayBuffer();
 }

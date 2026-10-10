@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  Loader2, Mic, Play, RefreshCw, Trash2, ChevronLeft, Save, UserPlus, ExternalLink, AlertTriangle, CheckCircle, KeyRound,
+  Loader2, Mic, Play, RefreshCw, Volume2, Trash2, ChevronLeft, Save, UserPlus, ExternalLink, AlertTriangle, CheckCircle, KeyRound,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import {
-  ERA_OPTIONS, eraLabel, interviewApi, InterviewError,
+  ERA_OPTIONS, eraLabel, interviewApi, InterviewError, TTS_MODELS,
   type InterviewMode, type InterviewSession, type InterviewSubject, type InterviewTurn,
 } from "@/lib/interview";
 
@@ -205,6 +205,27 @@ function SubjectSettings({ subject, onSaved, monthCost }: { subject: InterviewSu
   const [newPw, setNewPw] = useState("");
   const [pwMsg, setPwMsg] = useState<string | null>(null);
   const ghost = subject.mode === "ghostwriter";
+  const [testing, setTesting] = useState(false);
+  const [testMsg, setTestMsg] = useState<string | null>(null);
+
+  // Play a short sample with the voice, model and speed currently in the boxes (saved or not).
+  const testVoice = async () => {
+    setTesting(true); setTestMsg(null);
+    try {
+      const r = await interviewApi.voiceTest({
+        voice_id: voiceId.trim(), model_id: model.trim(), speed: Number(speed) || 1,
+        language: subject.language, honorific: subject.honorific,
+      });
+      const a = new Audio(r.audio);
+      a.preservesPitch = true;
+      await a.play();
+      setTestMsg(`Playing: ${model} at ${Number(speed) || 1}×`);
+    } catch (e) {
+      const err = e as InterviewError;
+      setTestMsg(`Couldn't make a sample: ${err.message}`);
+    }
+    setTesting(false);
+  };
 
   const save = async () => {
     setBusy(true);
@@ -279,14 +300,19 @@ function SubjectSettings({ subject, onSaved, monthCost }: { subject: InterviewSu
           <Field label="ElevenLabs voice ID"><input className="input-field !py-2 text-sm" value={voiceId} onChange={(e) => setVoiceId(e.target.value)} /></Field>
           <Field label="TTS model">
             <select className="input-field !py-2 text-sm" value={model} onChange={(e) => setModel(e.target.value)}>
-              <option value="eleven_v3">eleven_v3 (most natural)</option>
-              <option value="eleven_v4">eleven_v4</option>
-              <option value="eleven_flash_v2_5">eleven_flash_v2_5 (fastest)</option>
-              <option value="eleven_multilingual_v2">eleven_multilingual_v2</option>
+              {TTS_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+              {!TTS_MODELS.some((m) => m.id === model) && <option value={model}>{model}</option>}
             </select>
           </Field>
           <Field label="Speed"><input className="input-field !py-2 text-sm" value={speed} onChange={(e) => setSpeed(e.target.value)} /></Field>
           <Field label="Monthly budget ($)"><input className="input-field !py-2 text-sm" value={budget} onChange={(e) => setBudget(e.target.value)} /></Field>
+        </div>
+        <div className="flex flex-wrap items-center gap-3 mt-3">
+          <button className="btn-secondary !py-2" onClick={testVoice} disabled={testing || !voiceId.trim()}>
+            {testing ? <Loader2 size={15} className="animate-spin" /> : <Volume2 size={15} />} Test voice
+          </button>
+          {testMsg && <span className={`text-xs ${testMsg.startsWith("Couldn't") ? "text-error-600" : "text-ink-500"}`}>{testMsg}</span>}
+          {!testMsg && <span className="text-xs text-ink-400">Plays a short sample with the settings above. Click Save to keep them.</span>}
         </div>
         <div className="flex items-end gap-2 mt-3">
           <Field label="Reset their sign-in password"><input className="input-field !py-2 text-sm" value={newPw} onChange={(e) => setNewPw(e.target.value)} /></Field>

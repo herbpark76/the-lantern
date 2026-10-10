@@ -114,6 +114,16 @@ export const ERA_OPTIONS: Array<{ key: string; label: string; ko: string }> = [
   { key: "free", label: "Open conversation", ko: "자유롭게" },
 ];
 
+// ElevenLabs text-to-speech models offered in Studio (interviewer voice and chapter narration).
+export const TTS_MODELS: Array<{ id: string; label: string }> = [
+  { id: "eleven_v4", label: "eleven_v4 (newest, most natural)" },
+  { id: "eleven_v4_turbo", label: "eleven_v4_turbo (fast, real-time)" },
+  { id: "eleven_v3", label: "eleven_v3 (expressive)" },
+  { id: "eleven_v3_conversational", label: "eleven_v3_conversational (fast, conversational)" },
+  { id: "eleven_flash_v2_5", label: "eleven_flash_v2_5 (fastest, half price)" },
+  { id: "eleven_multilingual_v2", label: "eleven_multilingual_v2" },
+];
+
 export function eraLabel(key: string): string {
   return ERA_OPTIONS.find((e) => e.key === key)?.label ?? key;
 }
@@ -188,6 +198,8 @@ export const interviewApi = {
     invoke<{ ok: boolean; status: string }>("interview-admin", { action: "publish_book", ...p }),
   unpublishBook: (story_slug: string) =>
     invoke<{ ok: boolean; status: string }>("interview-admin", { action: "unpublish_book", story_slug }),
+  voiceTest: (p: { voice_id: string; model_id: string; speed: number; language: string; honorific?: string }) =>
+    invoke<{ audio: string; text: string }>("interview-admin", { action: "voice_test", ...p }),
   setPassword: (subject_id: string, password: string) =>
     invoke<{ ok: boolean }>("interview-admin", { action: "set_password", subject_id, password }),
   sessionAudio: (session_id: string) =>
