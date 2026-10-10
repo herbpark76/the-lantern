@@ -7,6 +7,7 @@ import {
   admin, callClaude, corsHeaders, ERAS, estimateCost, getCaller, GITHUB_REPO, GITHUB_TOKEN,
   isStaffUser, json, jsonError, SERVICE_ROLE_KEY, type Session, type Subject, type Turn,
 } from "../_shared/interview.ts";
+import type { SupabaseClient } from "npm:@supabase/supabase-js@2.57.4";
 
 const TRANSLATE_SYSTEM = `You translate Korean interview transcripts into English for a novelist. The speaker is an elderly Korean woman from Daegu speaking in Gyeongsang dialect, transcribed by speech-to-text (expect small transcription errors; translate the evident meaning). Translate faithfully and completely, line by line, keeping each "Interviewer:" / speaker label. Preserve her voice, idioms and tone; when a Korean word or phrase carries meaning that English loses (dialect, food, kinship terms, sayings), keep it in romanized Korean with a short gloss in brackets. Output only the translation.`;
 
@@ -34,13 +35,13 @@ function b64utf8(s: string): string {
   return btoa(bin);
 }
 
-function parseSections(text: string): Record<string, string> {
+function parseSections(text: string, tags = ["summary", "scene_notes", "followups", "summary_ko"]): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const tag of ["summary", "scene_notes", "followups", "summary_ko"]) {
+  for (const tag of tags) {
     const m = text.match(new RegExp(`<${tag}>([\\s\\S]*?)(?:</${tag}>|$)`));
     if (m) out[tag] = m[1].trim();
   }
-  if (!out.summary) out.summary = text.trim();
+  if (!out[tags[0]]) out[tags[0]] = text.trim();
   return out;
 }
 
@@ -61,6 +62,109 @@ async function commitToGitHub(path: string, content: string, message: string): P
     body: JSON.stringify({ message, content: b64utf8(content), ...(sha ? { sha } : {}) }),
   });
   if (!resp.ok) throw new Error(`GitHub ${resp.status}: ${(await resp.text()).slice(0, 300)}`);
+}
+
+// ── Ghostwriter sessions: story bible + outline + opening chapter ─────────
+
+const GW_NOTES_SYSTEM = `You are a story developer. You receive the transcript of a voice interview in which an author described a story they want written (speech-to-text; small errors are normal), plus notes from earlier sessions. Build on everything known so far; where something was left open, make a clear, tasteful suggestion and mark it "(suggested)". Never contradict what the author said.
+
+Answer with exactly these three sections, each wrapped in its tag, in markdown (## subheadings, paragraphs and - bullets only; no tables):
+
+<bible>
+The story bible: working title (and 2–3 alternates), logline, genre and tone, comparable books/films, setting, the protagonist (want, need, flaw, voice), key supporting characters and the opposing force, central conflict and stakes, themes, and the author's stated tastes and influences.
+</bible>
+<outline>
+A three-act outline: Act I, Act II (with the midpoint), Act III. Under each act, numbered chapter beats of one or two sentences each, about 18–26 chapters in all.
+</outline>
+<open_questions>
+4–8 specific questions to settle in the next session, as - bullets.
+</open_questions>`;
+
+function chapterSystem(subject: Subject): string {
+  const lang = subject.language === "ko" ? "Korean" : "English";
+  return `You are a skilled novelist ghostwriting a book for ${subject.honorific || subject.display_name}. From the interview transcript and earlier notes, write the opening chapter of their story: about 2,500–3,500 words, in ${lang}, in the genre, tone and point of view they described. Let the craft of the authors they love inform yours (pacing, wit, texture), but never imitate or quote their text. Start in scene with a strong hook, establish the protagonist's voice and desire, and end the chapter on a turn that pulls the reader on. Where details were left open, choose well and stay consistent with everything they said.
+
+Output only the chapter in markdown: first line "# Chapter 1: <title>", then paragraphs. Use "### 1", "### 2" lines only for section breaks. No other headings, no notes.`;
+}
+
+async function finishGhostwriter(
+  db: SupabaseClient, subject: Subject, session: Session, turns: Turn[], skipGithub: boolean,
+): Promise<Response> {
+  const name = subject.display_name || subject.honorific;
+  const transcript = turns
+    .map((t) => t.speaker === "interviewer" ? `Ghostwriter: ${t.text}` : `${name}: ${t.skipped ? "(skipped)" : t.text}`)
+    .join("\n\n");
+
+  const { data: earlierRows } = await db
+    .from("interview_sessions").select("session_no, summary_en, scene_notes, followups")
+    .eq("subject_id", subject.id).lt("session_no", session.session_no).order("session_no");
+  const earlier = ((earlierRows as Array<{ session_no: number; summary_en: string | null; scene_notes: string | null; followups: string | null }>) ?? [])
+    .map((s) => `Session ${s.session_no} story bible:\n${s.summary_en ?? ""}\n\nOutline:\n${s.scene_notes ?? ""}\n\nOpen questions then:\n${s.followups ?? ""}`)
+    .join("\n\n---\n\n") || "(none — this is the first session)";
+  const input = `Earlier sessions:\n${earlier}\n\nThis session (#${session.session_no}) transcript:\n\n${transcript}`;
+
+  const [notes, chapter] = await Promise.all([
+    callClaude(GW_NOTES_SYSTEM, [{ role: "user", content: input }], 8000),
+    callClaude(chapterSystem(subject), [{ role: "user", content: input }], 12000),
+  ]);
+  const parsed = parseSections(notes.text, ["bible", "outline", "open_questions"]);
+  let chapterMd = chapter.text.trim();
+  if (!chapterMd.startsWith("# ")) chapterMd = `# Chapter 1\n\n${chapterMd}`;
+  const chapterTitle = chapterMd.split("\n")[0].replace(/^#\s*/, "");
+
+  const input_tokens = session.input_tokens + notes.input_tokens + chapter.input_tokens;
+  const output_tokens = session.output_tokens + notes.output_tokens + chapter.output_tokens;
+  const nn = String(session.session_no).padStart(2, "0");
+
+  const update: Record<string, unknown> = {
+    status: "finished",
+    ended_at: session.ended_at ?? new Date().toISOString(),
+    transcript_ko: transcript,
+    transcript_en: transcript,
+    summary_en: parsed.bible ?? "",
+    scene_notes: parsed.outline ?? "",
+    followups: parsed.open_questions ?? "",
+    input_tokens,
+    output_tokens,
+    est_cost_usd: estimateCost(input_tokens, output_tokens),
+    github_error: null,
+  };
+
+  // Put the results in Studio > Book (with narration) for this story.
+  const bibleMd = `# Story Bible, Session ${session.session_no}\n\n${update.summary_en}\n\n## Three-act outline\n\n${update.scene_notes}\n\n## Still to decide\n\n${update.followups}`;
+  const voiceCols = subject.language === "ko"
+    ? { voice_ko: subject.tts_voice_id }
+    : { voice_en: subject.tts_voice_id };
+  const bodyCol = subject.language === "ko" ? "body_ko" : "body_en";
+  const titleCol = subject.language === "ko" ? "title_ko" : "title_en";
+  const { error: docErr } = await db.from("book_docs").upsert([
+    {
+      id: `${subject.story_slug}/summary-${nn}`, story_slug: subject.story_slug, kind: "summary", position: session.session_no,
+      [titleCol]: `Story Bible, Session ${session.session_no}`, [bodyCol]: bibleMd, ...voiceCols,
+      model_id: subject.tts_model_id, speed: Number(subject.tts_speed) || 1, updated_at: new Date().toISOString(),
+    },
+    {
+      id: `${subject.story_slug}/sample-${nn}`, story_slug: subject.story_slug, kind: "sample", position: session.session_no,
+      [titleCol]: chapterTitle, [bodyCol]: chapterMd, ...voiceCols,
+      model_id: subject.tts_model_id, speed: Number(subject.tts_speed) || 1, updated_at: new Date().toISOString(),
+    },
+  ], { onConflict: "id" });
+  if (docErr) console.error("[interview-finish] book_docs upsert failed", docErr.message);
+
+  if (!skipGithub) {
+    const person = (subject.display_name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || subject.id.slice(0, 8);
+    const path = `interviews/${subject.story_slug}/${person}/session-${nn}.md`;
+    const md = `${bibleMd}\n\n---\n\n${chapterMd}\n\n---\n\n## Transcript\n\n${transcript}\n`;
+    try {
+      await commitToGitHub(path, md, `Ghostwriter session ${nn} (${subject.story_slug})`);
+      update.github_path = path;
+    } catch (e) {
+      update.github_error = String((e as Error).message ?? e);
+    }
+  }
+
+  await db.from("interview_sessions").update(update).eq("id", session.id);
+  return json({ ok: true, github_path: update.github_path ?? null, github_error: update.github_error ?? null, book: true });
 }
 
 Deno.serve(async (req: Request) => {
@@ -91,6 +195,10 @@ Deno.serve(async (req: Request) => {
     if (!turns.some((t) => t.speaker === "subject" && !t.skipped)) {
       await db.from("interview_sessions").update({ status: "finished" }).eq("id", session.id);
       return json({ ok: true, empty: true });
+    }
+
+    if (subject.mode === "ghostwriter") {
+      return await finishGhostwriter(db, subject, session, turns, !!skip_github);
     }
 
     const name = subject.display_name || subject.honorific;

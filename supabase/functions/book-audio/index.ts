@@ -120,8 +120,9 @@ Deno.serve(async (req: Request) => {
     if (!doc) return jsonError(404, "Not found");
 
     if (!staff) {
-      const { data: subj } = await db.from("interview_subjects").select("story_slug").eq("user_id", user.id).maybeSingle();
-      if ((subj as { story_slug?: string } | null)?.story_slug !== doc.story_slug) return jsonError(403, "Forbidden");
+      const { data: subj } = await db.from("interview_subjects").select("id")
+        .eq("user_id", user.id).eq("story_slug", doc.story_slug).limit(1);
+      if (!subj?.length) return jsonError(403, "Forbidden");
       if (action !== "status") return jsonError(403, "Staff only");
     }
 

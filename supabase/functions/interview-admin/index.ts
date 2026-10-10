@@ -1,10 +1,14 @@
 // Interview Mode: staff-only admin actions for Studio > Interviews.
-//   { action: "create_subject", email, password?, display_name, story_slug, honorific? }
+//   { action: "create_subject", email, password?, display_name, story_slug, mode?, language?, honorific? }
+//     mode "memoir" (default: Korean, Daegu voice) or "ghostwriter" (English, Matthew voice).
+//     One account can have several interviews, one per story_slug.
 //   { action: "set_password", subject_id, password }
 //   { action: "session_audio", session_id }   → { urls: { [turn_id]: signedUrl } }
 //   { action: "delete_session", session_id }  → removes a (test) session + its audio
 
 import { admin, BUCKET, corsHeaders, getCaller, isStaffUser, json, jsonError, type Turn } from "../_shared/interview.ts";
+
+const MATTHEW_VOICE = "kNjmAhXxYgxjF0oyxw4c"; // English narrator voice for ghostwriter projects
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders });
@@ -42,13 +46,23 @@ Deno.serve(async (req: Request) => {
         created = true;
       }
 
+      const mode = body.mode === "ghostwriter" ? "ghostwriter" : "memoir";
+      const language = body.language === "en" || body.language === "ko" ? body.language : (mode === "ghostwriter" ? "en" : "ko");
+      const defaults = mode === "ghostwriter"
+        ? { honorific: body.display_name, tts_voice_id: MATTHEW_VOICE, tts_model_id: "eleven_v3", tts_speed: 1.0, next_era: "free" }
+        : {};
       const { data: subject, error } = await db.from("interview_subjects").insert({
         user_id: userId,
         display_name: body.display_name,
         story_slug: body.story_slug,
+        mode,
+        language,
+        ...defaults,
         ...(body.honorific ? { honorific: body.honorific } : {}),
       }).select().single();
-      if (error) return jsonError(400, error.message.includes("duplicate") ? "That account is already an interview subject" : error.message);
+      if (error) {
+        return jsonError(400, error.message.includes("duplicate") ? "That account already has an interview for this story" : error.message);
+      }
       return json({ subject, account_created: created });
     }
 

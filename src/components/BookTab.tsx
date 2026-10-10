@@ -65,7 +65,16 @@ export function BookTab() {
 
   const slugs = useMemo(() => Array.from(new Set(docs.map((d) => d.story_slug))), [docs]);
   const ofKind = docs.filter((d) => d.story_slug === slug && d.kind === kind);
-  const doc = ofKind.find((d) => d.id === docId) ?? ofKind[0] ?? null;
+  // Newest session's page first.
+  const doc = ofKind.find((d) => d.id === docId) ?? ofKind[ofKind.length - 1] ?? null;
+
+  // Books written in only one language (e.g. English ghostwriter projects) show no language toggle.
+  const ofSlug = docs.filter((d) => d.story_slug === slug);
+  const hasEn = ofSlug.some((d) => d.body_en?.trim());
+  const hasKo = ofSlug.some((d) => d.body_ko?.trim());
+  const langs: Lang[] = hasEn && hasKo ? ["en", "ko"] : hasKo ? ["ko"] : ["en"];
+  const shown: Lang = langs.includes(lang) ? lang : langs[0];
+  const englishOnly = langs.length === 1 && langs[0] === "en";
 
   if (loading) return <div className="py-12 flex justify-center"><Loader2 className="animate-spin text-ink-400" /></div>;
   if (!docs.length) {
@@ -88,33 +97,33 @@ export function BookTab() {
       <div className="flex flex-wrap items-center justify-between gap-3 font-sans">
         <div className="flex gap-2">
           <KindButton active={kind === "sample"} onClick={() => { setKind("sample"); setDocId(null); }} icon={<BookOpen size={16} />}>
-            Sample Chapter
+            {englishOnly ? "Chapter" : "Sample Chapter"}
           </KindButton>
           <KindButton active={kind === "summary"} onClick={() => { setKind("summary"); setDocId(null); }} icon={<FileText size={16} />}>
-            Summary
+            {englishOnly ? "Story Bible" : "Summary"}
           </KindButton>
         </div>
-        <div className="inline-flex rounded-lg border border-ink-200 dark:border-ink-700 overflow-hidden text-sm">
-          {(["en", "ko"] as const).map((l) => (
+        {langs.length > 1 && <div className="inline-flex rounded-lg border border-ink-200 dark:border-ink-700 overflow-hidden text-sm">
+          {langs.map((l) => (
             <button key={l} onClick={() => setLang(l)}
               className={`px-4 py-2 ${lang === l ? "bg-accent-500 text-white" : "text-ink-600 dark:text-ink-300 hover:bg-ink-100 dark:hover:bg-ink-800"}`}>
               {l === "en" ? "English" : "한국어"}
             </button>
           ))}
-        </div>
+        </div>}
       </div>
 
       {ofKind.length > 1 && (
         <select className="input-field !py-2 !w-auto font-sans text-sm" value={doc?.id ?? ""} onChange={(e) => setDocId(e.target.value)}>
-          {ofKind.map((d) => <option key={d.id} value={d.id}>{lang === "en" ? d.title_en : d.title_ko}</option>)}
+          {ofKind.map((d) => <option key={d.id} value={d.id}>{(shown === "en" ? d.title_en : d.title_ko) || d.title_en || d.title_ko || d.id}</option>)}
         </select>
       )}
 
       {doc ? (
         <>
-          <AudioBar key={`${doc.id}:${lang}:${doc.updated_at}`} doc={doc} lang={lang} />
-          <article lang={lang} className="card px-6 sm:px-10 py-8">
-            <Markdown text={lang === "en" ? doc.body_en : doc.body_ko} lang={lang} />
+          <AudioBar key={`${doc.id}:${shown}:${doc.updated_at}`} doc={doc} lang={shown} />
+          <article lang={shown} className="card px-6 sm:px-10 py-8">
+            <Markdown text={shown === "en" ? doc.body_en : doc.body_ko} lang={shown} />
           </article>
         </>
       ) : (
@@ -207,7 +216,9 @@ function AudioBar({ doc, lang }: { doc: BookDoc; lang: Lang }) {
     try { localStorage.setItem("book-rate", String(rate)); } catch { /* ignore */ }
   }, [rate]);
 
-  const voiceLabel = lang === "ko" ? "Daegu voice · 한국어" : "Daegu voice · English";
+  const voiceId = lang === "ko" ? doc.voice_ko : doc.voice_en;
+  const voiceName = voiceId === "UzElYEdLTwdjry68bt1c" ? "Daegu voice" : voiceId === "kNjmAhXxYgxjF0oyxw4c" ? "Matthew" : "Narrator";
+  const voiceLabel = `${voiceName} · ${lang === "ko" ? "한국어" : "English"}`;
 
   return (
     <div className="card px-4 py-3 flex flex-wrap items-center gap-3 font-sans">

@@ -1,5 +1,7 @@
 import { supabase } from "@/lib/supabase";
 
+export type InterviewMode = "memoir" | "ghostwriter";
+
 // ── Types shared by the /interview page and Studio > Interviews ──
 
 export interface InterviewSubject {
@@ -7,6 +9,7 @@ export interface InterviewSubject {
   user_id: string;
   story_slug: string;
   display_name: string;
+  mode: InterviewMode;
   language: string;
   honorific: string;
   tts_voice_id: string;
@@ -62,12 +65,21 @@ export interface Question {
   audio_url: string | null;
 }
 
+export interface InterviewChoice {
+  story_slug: string;
+  display_name: string;
+  mode: InterviewMode;
+  language: string;
+}
+
 export interface InterviewState {
-  subject: { id: string; display_name: string; honorific: string; language: string };
+  subject: { id: string; display_name: string; honorific: string; language: string; mode: InterviewMode; story_slug: string };
   session: { id: string; session_no: number; era: string; started_at: string } | null;
   question: Question | null;
   last_answer: string | null;
   answers_count: number;
+  /** Set (and nothing else) when this account has several interviews and none was named. */
+  choose?: InterviewChoice[];
 }
 
 export interface AnswerResult {
@@ -134,24 +146,34 @@ async function invoke<T>(fn: string, body: Record<string, unknown> | FormData): 
   return data as T;
 }
 
+// Which interview the /interview page is talking to (one account can have several).
+// Set by the page from the URL (/interview/<slug>); empty means "my only one".
+let currentSlug = "";
+export function setInterviewSlug(slug: string | undefined) { currentSlug = slug ?? ""; }
+
+function turn<T>(action: string, extra: Record<string, unknown> = {}) {
+  return invoke<T>("interview-turn", { action, ...extra, ...(currentSlug ? { story_slug: currentSlug } : {}) });
+}
+
 export const interviewApi = {
-  state: () => invoke<InterviewState>("interview-turn", { action: "state" }),
-  start: () => invoke<InterviewState>("interview-turn", { action: "start" }),
+  state: () => turn<InterviewState>("state"),
+  start: () => turn<InterviewState>("start"),
   answerAudio: (audio: Blob, durationMs: number) => {
     const form = new FormData();
     const ext = audio.type.includes("webm") ? "webm" : "m4a";
     form.append("action", "answer");
     form.append("audio", audio, `answer.${ext}`);
     form.append("duration_ms", String(Math.round(durationMs)));
+    if (currentSlug) form.append("story_slug", currentSlug);
     return invoke<AnswerResult>("interview-turn", form);
   },
-  answerText: (text: string) => invoke<AnswerResult>("interview-turn", { action: "answer_text", text }),
-  skip: () => invoke<AnswerResult>("interview-turn", { action: "skip" }),
-  redo: () => invoke<InterviewState>("interview-turn", { action: "redo" }),
-  finish: () => invoke<FinishResult>("interview-turn", { action: "finish" }),
+  answerText: (text: string) => turn<AnswerResult>("answer_text", { text }),
+  skip: () => turn<AnswerResult>("skip"),
+  redo: () => turn<InterviewState>("redo"),
+  finish: () => turn<FinishResult>("finish"),
 
   // Staff
-  createSubject: (p: { email: string; password?: string; display_name: string; story_slug: string; honorific?: string }) =>
+  createSubject: (p: { email: string; password?: string; display_name: string; story_slug: string; honorific?: string; mode?: InterviewMode; language?: string }) =>
     invoke<{ subject: InterviewSubject; account_created: boolean }>("interview-admin", { action: "create_subject", ...p }),
   setPassword: (subject_id: string, password: string) =>
     invoke<{ ok: boolean }>("interview-admin", { action: "set_password", subject_id, password }),

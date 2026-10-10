@@ -15,8 +15,8 @@ function Routes() {
   const { path } = useRouter();
   const { segments } = parsePath(path);
 
-  // Interview Mode is a full-screen, nav-free page for the person telling her story.
-  if (segments[0] === "interview") return <InterviewPage />;
+  // Interview Mode is a full-screen, nav-free page. /interview/<slug> picks one of several interviews.
+  if (segments[0] === "interview") return <InterviewPage slug={segments[1]} />;
 
   let page: React.ReactNode;
 

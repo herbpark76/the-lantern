@@ -59,6 +59,7 @@ export interface Subject {
   id: string;
   user_id: string;
   story_slug: string;
+  mode: "memoir" | "ghostwriter";
   display_name: string;
   language: string;
   honorific: string;
@@ -187,6 +188,96 @@ export const ERAS: Record<string, { label: string; questions: string[] }> = {
     questions: [],
   },
 };
+
+// ── Words the server says, per interview language ───────────────────────
+
+export function strings(subject: Subject) {
+  const en = subject.language === "en";
+  const name = subject.honorific || subject.display_name;
+  const ghost = subject.mode === "ghostwriter";
+  return {
+    busy: en ? "Something went wrong for a moment. Please try again." : "잠깐 문제가 생겼어요. 조금 있다가 다시 눌러 주세요.",
+    budget: en ? "This month's interview budget is used up." : "이번 달 이야기 시간을 다 썼어요. 아드님께 말씀해 주세요.",
+    notHeard: en ? "I didn't catch that. Could you say it again?" : "잘 못 들었어요. 다시 한 번 말씀해 주시겠어요?",
+    noAnswer: en ? "(no answer)" : "(말씀이 없으셨어요)",
+    skipNote: en
+      ? "(They'd like to skip this question. Move on to a different one without comment.)"
+      : `(${name}께서 이 질문은 넘어가고 싶다고 하셨습니다. 다른, 가벼운 질문으로 넘어가 주세요.)`,
+    start: (sessionNo: number) => {
+      if (ghost) {
+        return sessionNo === 1
+          ? `(Conversation start, session 1. Greet ${name} warmly by name, say in one short sentence that you're their ghostwriter here to turn their idea into a story, then ask your first question.)`
+          : `(Conversation start, session ${sessionNo}. Welcome ${name} back, recall one specific thing about the story from last time in a sentence, then ask your next question.)`;
+      }
+      if (en) {
+        return sessionNo === 1
+          ? `(Conversation start, session 1. Greet ${name} warmly, introduce yourself in one short sentence as an AI helper set up to hear their story, then ask your first question.)`
+          : `(Conversation start, session ${sessionNo}. Welcome ${name} back, mention one thing from last time, then ask today's first question.)`;
+      }
+      return sessionNo === 1
+        ? `(대화 시작. 이번이 첫 번째 이야기 시간입니다. ${name}께 따뜻하게 인사하고, 아드님이 ${name}의 이야기를 책으로 쓰려고 준비한 AI 도우미라고 아주 짧게 소개한 뒤, 오늘의 첫 질문을 해 주세요.)`
+        : `(대화 시작. ${sessionNo}번째 이야기 시간입니다. ${name}께 반갑게 인사하고, 지난번 이야기를 한 가지 짧게 언급한 뒤, 오늘의 첫 질문을 해 주세요.)`;
+    },
+    closing: ghost
+      ? "(They're finishing for now. Don't ask a question. In one or two short sentences, thank them and say you'll now write up the story bible, outline and an opening chapter, which will be ready in Studio under Book in a few minutes.)"
+      : en
+        ? "(They'd like to stop for today. Don't ask a question. In one or two sentences, warmly thank them for what they shared and say you look forward to next time.)"
+        : `(${name}께서 오늘은 여기까지 하자고 하셨습니다. 질문은 하지 말고, 오늘 들려주신 이야기에 따뜻하게 감사드리고, 다음에 또 이야기 나누자고 한두 문장으로 짧게 인사해 주세요.)`,
+  };
+}
+
+// ── Ghostwriter prompt ───────────────────────────────────────────────────
+
+export function ghostwriterSystemPrompt(subject: Subject, session: Session, earlier: Session[]): string {
+  const name = subject.honorific || subject.display_name;
+  const earlierText = earlier.length
+    ? earlier.map((s) => `Session ${s.session_no}:\n${s.summary_en ?? "(no notes)"}${s.followups ? `\nOpen questions left: ${s.followups}` : ""}`).join("\n\n")
+    : "This is the first session. You know nothing about the story or their tastes yet.";
+
+  return `You are a warm, sharp ghostwriter and story developer. You are interviewing ${name} by voice to develop a story they want written. Everything you write is spoken aloud by a text-to-speech voice; their answers reach you as speech-to-text transcripts (small errors are normal; infer the meaning, never mention them).
+
+# How to speak
+- Speak ${subject.language === "ko" ? "Korean, in natural 존댓말" : "English"}, casually and warmly, like a collaborator who is genuinely into the idea.
+- ONE question per turn, 1–3 short sentences. No lists, headings, emojis, stage directions or brackets.
+- Briefly react to what they said (a specific reaction, not generic praise), then ask.
+- Now and then offer one quick "what if…" possibility and ask whether it fits, but the story is theirs: follow their instincts, never push yours.
+- Never write the story itself here.
+
+# What to find out (over the conversation, not as a checklist)
+1. Their taste: books, authors, films or shows they love, and what exactly they love about them.
+2. The seed: what the story is about, and the image, question or feeling that sparked it.
+3. Genre, tone, setting in time and place, and the kind of book (length, format, who it's for).
+4. The protagonist: what they want, what they need, their flaw, how they talk.
+5. Other key characters, and the opposing force.
+6. The central conflict and the stakes; what makes it urgent.
+7. Scenes they can already picture.
+8. How it ends, or what they want the reader to feel at the end.
+9. Title ideas.
+Follow their energy and dig into anything vivid, but keep track of what's still missing and steer there.
+
+# When you have enough
+When you have enough for a strong story bible, a three-act outline and an opening chapter (usually after 15–25 answers, sooner if they are detailed), say so in one or two sentences: they can tap Finish to have it written now, or keep going to add more. If they ask you to write it, tell them to tap Finish.
+
+# Notes from the author for you
+${subject.interviewer_notes?.trim() || "(none)"}
+
+# Never ask about
+${subject.off_limits?.length ? subject.off_limits.map((t) => `- ${t}`).join("\n") : "(nothing)"}
+
+# What earlier sessions already established (build on it, don't re-ask)
+${earlierText}
+
+# Background
+${subject.background?.trim() || "(none)"}
+
+This is session ${session.session_no}.`;
+}
+
+export function systemPromptFor(subject: Subject, session: Session, earlier: Session[]): string {
+  return subject.mode === "ghostwriter"
+    ? ghostwriterSystemPrompt(subject, session, earlier)
+    : interviewerSystemPrompt(subject, session, earlier);
+}
 
 // ── Interviewer prompt ───────────────────────────────────────────────────
 

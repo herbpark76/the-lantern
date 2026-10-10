@@ -5,7 +5,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import {
   ERA_OPTIONS, eraLabel, interviewApi, InterviewError,
-  type InterviewSession, type InterviewSubject, type InterviewTurn,
+  type InterviewMode, type InterviewSession, type InterviewSubject, type InterviewTurn,
 } from "@/lib/interview";
 
 const GITHUB_REPO_URL = "https://github.com/herbpark76/the-lantern/blob/main/";
@@ -40,7 +40,7 @@ export function InterviewsTab() {
               ? "border-accent-400 text-accent-700 dark:text-accent-300 bg-accent-50 dark:bg-accent-950"
               : "border-ink-200 dark:border-ink-700 text-ink-600 dark:text-ink-300"}`}
           >
-            {s.display_name} <span className="text-ink-400">· {s.story_slug}</span>
+            {s.display_name} <span className="text-ink-400">· {s.story_slug}{s.mode === "ghostwriter" ? " · ghostwriter" : ""}</span>
           </button>
         ))}
         <button onClick={() => setSelectedId("__new")} className={`btn-ghost !py-1.5 ${selectedId === "__new" ? "bg-ink-100 dark:bg-ink-800" : ""}`}>
@@ -65,6 +65,14 @@ function NewSubjectForm({ onCreated }: { onCreated: (id: string) => void }) {
   const [name, setName] = useState("Mom");
   const [slug, setSlug] = useState("red-earth");
   const [honorific, setHonorific] = useState("어머니");
+  const [mode, setMode] = useState<InterviewMode>("memoir");
+
+  // Sensible starting values for each kind of interview.
+  const pickMode = (m: InterviewMode) => {
+    setMode(m);
+    if (m === "ghostwriter") { setName("Herb"); setSlug("herbs-workspace"); setHonorific("Herb"); }
+    else { setName("Mom"); setSlug("red-earth"); setHonorific("어머니"); }
+  };
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -72,7 +80,10 @@ function NewSubjectForm({ onCreated }: { onCreated: (id: string) => void }) {
     setBusy(true);
     setMsg(null);
     try {
-      const r = await interviewApi.createSubject({ email, password: password || undefined, display_name: name, story_slug: slug, honorific });
+      const r = await interviewApi.createSubject({
+        email, password: password || undefined, display_name: name, story_slug: slug, honorific,
+        mode, language: mode === "ghostwriter" ? "en" : "ko",
+      });
       setMsg(r.account_created ? "Account created and ready." : "Linked to the existing account.");
       onCreated(r.subject.id);
     } catch (e) {
@@ -88,9 +99,17 @@ function NewSubjectForm({ onCreated }: { onCreated: (id: string) => void }) {
         <p className="text-sm text-ink-500 mt-1">
           Use their email. If they don't have a Lantern account yet, set a password and one is created for them
           (already confirmed). Sign them in once on their phone at <code>/interview</code> and add it to the home screen.
+          One account can have several interviews; each also has its own link, <code>/interview/&lt;story slug&gt;</code>.
         </p>
       </div>
       <div className="grid sm:grid-cols-2 gap-3">
+        <Field label="Kind of interview">
+          <select className="input-field !py-2" value={mode} onChange={(e) => pickMode(e.target.value as InterviewMode)}>
+            <option value="memoir">Memoir — Korean, life story by era</option>
+            <option value="ghostwriter">Ghostwriter — English, builds a new story from your idea</option>
+          </select>
+        </Field>
+        <div className="hidden sm:block" />
         <Field label="Email"><input className="input-field !py-2" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
         <Field label="Password (new accounts only)"><input className="input-field !py-2" type="text" value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
         <Field label="Display name"><input className="input-field !py-2" value={name} onChange={(e) => setName(e.target.value)} /></Field>
@@ -183,6 +202,7 @@ function SubjectSettings({ subject, onSaved, monthCost }: { subject: InterviewSu
   const [saved, setSaved] = useState(false);
   const [newPw, setNewPw] = useState("");
   const [pwMsg, setPwMsg] = useState<string | null>(null);
+  const ghost = subject.mode === "ghostwriter";
 
   const save = async () => {
     setBusy(true);
@@ -213,7 +233,12 @@ function SubjectSettings({ subject, onSaved, monthCost }: { subject: InterviewSu
       <div className="flex items-start justify-between gap-4">
         <div>
           <h3 className="font-serif text-lg text-ink-900 dark:text-ink-50 flex items-center gap-2"><Mic size={18} className="text-accent-500" /> {subject.display_name}</h3>
-          <p className="text-xs text-ink-500 mt-1">Book: {subject.story_slug} · addressed as {subject.honorific} · last 30 days ≈ ${monthCost.toFixed(2)} of ${Number(subject.monthly_budget_usd).toFixed(0)}</p>
+          <p className="text-xs text-ink-500 mt-1">
+            {ghost ? "Ghostwriter" : "Memoir"} · Book: {subject.story_slug} · addressed as {subject.honorific} · last 30 days ≈ ${monthCost.toFixed(2)} of ${Number(subject.monthly_budget_usd).toFixed(0)}
+          </p>
+          <a href={`/interview/${subject.story_slug}`} target="_blank" rel="noreferrer" className="text-xs text-accent-600 inline-flex items-center gap-1 mt-1">
+            <ExternalLink size={12} /> {window.location.origin}/interview/{subject.story_slug}
+          </a>
         </div>
         <button className="btn-primary !py-2" onClick={save} disabled={busy}>
           {busy ? <Loader2 size={16} className="animate-spin" /> : saved ? <CheckCircle size={16} /> : <Save size={16} />} {saved ? "Saved" : "Save"}
@@ -221,11 +246,18 @@ function SubjectSettings({ subject, onSaved, monthCost }: { subject: InterviewSu
       </div>
 
       <div className="grid md:grid-cols-2 gap-4">
-        <Field label="Topic for the next session">
-          <select className="input-field !py-2" value={nextEra} onChange={(e) => setNextEra(e.target.value)}>
-            {ERA_OPTIONS.map((e) => <option key={e.key} value={e.key}>{e.label}</option>)}
-          </select>
-        </Field>
+        {ghost ? (
+          <p className="text-sm text-ink-500 self-center">
+            The ghostwriter asks about your taste, the idea, characters, conflict and ending, then says when it has enough.
+            Finishing a session writes a story bible, outline and opening chapter into Book.
+          </p>
+        ) : (
+          <Field label="Topic for the next session">
+            <select className="input-field !py-2" value={nextEra} onChange={(e) => setNextEra(e.target.value)}>
+              {ERA_OPTIONS.map((e) => <option key={e.key} value={e.key}>{e.label}</option>)}
+            </select>
+          </Field>
+        )}
         <Field label="Off limits (one per line, never asked)">
           <textarea className="input-field !py-2 text-sm" rows={3} value={offLimits} onChange={(e) => setOffLimits(e.target.value)}
             placeholder={"e.g. 아버지와의 결혼 생활 (her marriage)\n돌아가신 오빠 이야기"} />
@@ -246,6 +278,7 @@ function SubjectSettings({ subject, onSaved, monthCost }: { subject: InterviewSu
           <Field label="TTS model">
             <select className="input-field !py-2 text-sm" value={model} onChange={(e) => setModel(e.target.value)}>
               <option value="eleven_v3">eleven_v3 (most natural)</option>
+              <option value="eleven_v4">eleven_v4</option>
               <option value="eleven_flash_v2_5">eleven_flash_v2_5 (fastest)</option>
               <option value="eleven_multilingual_v2">eleven_multilingual_v2</option>
             </select>
@@ -274,6 +307,7 @@ function SessionDetail({ session, subject, onBack, onChanged }: {
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const ghost = subject.mode === "ghostwriter";
 
   useEffect(() => {
     supabase.from("interview_turns").select("*").eq("session_id", session.id).order("turn_no")
@@ -283,7 +317,9 @@ function SessionDetail({ session, subject, onBack, onChanged }: {
 
   const regenerate = async () => {
     setBusy("regen");
-    setMsg("Writing the translation and summary — this can take a minute or two…");
+    setMsg(ghost
+      ? "Writing the story bible, outline and opening chapter — this can take two or three minutes…"
+      : "Writing the translation and summary — this can take a minute or two…");
     try {
       const r = await interviewApi.regenerate(session.id);
       setMsg(r.github_error ? `Summary saved, but GitHub commit failed: ${r.github_error}` : `Summary written and saved to GitHub${r.github_path ? `: ${r.github_path}` : ""}.`);
@@ -339,18 +375,18 @@ function SessionDetail({ session, subject, onBack, onChanged }: {
 
       {(session.summary_en || session.scene_notes || session.followups) && (
         <div className="grid lg:grid-cols-3 gap-4">
-          <NotesCard title="Summary" text={session.summary_en} />
-          <NotesCard title="Scene notes" text={session.scene_notes} />
-          <NotesCard title="Follow-ups" text={session.followups} />
+          <NotesCard title={ghost ? "Story bible" : "Summary"} text={session.summary_en} />
+          <NotesCard title={ghost ? "Outline" : "Scene notes"} text={session.scene_notes} />
+          <NotesCard title={ghost ? "Still to decide" : "Follow-ups"} text={session.followups} />
         </div>
       )}
       {session.summary_ko && <NotesCard title="요약 · Korean summary for her to read" text={session.summary_ko} />}
 
       <div className="flex gap-1 border-b border-ink-200 dark:border-ink-800">
-        {(["conversation", "english"] as const).map((v) => (
+        {(ghost ? ["conversation"] as const : ["conversation", "english"] as const).map((v) => (
           <button key={v} onClick={() => setView(v)}
             className={`px-3 py-2 text-sm ${view === v ? "text-accent-600 border-b-2 border-accent-500" : "text-ink-500"}`}>
-            {v === "conversation" ? "Conversation (Korean + audio)" : "English translation"}
+            {v === "conversation" ? (ghost ? "Conversation (+ audio)" : "Conversation (Korean + audio)") : "English translation"}
           </button>
         ))}
       </div>
@@ -361,7 +397,7 @@ function SessionDetail({ session, subject, onBack, onChanged }: {
             <div key={t.id} className={`flex gap-3 ${t.speaker === "subject" ? "" : "opacity-80"}`}>
               <div className="w-20 shrink-0 text-xs text-ink-400 pt-1">{t.speaker === "subject" ? subject.display_name : "Interviewer"}</div>
               <div className={`flex-1 rounded-xl px-4 py-2 ${t.speaker === "subject" ? "bg-accent-50 dark:bg-accent-950/40" : "bg-ink-100 dark:bg-ink-900"}`}>
-                <p className="text-base leading-relaxed text-ink-900 dark:text-ink-100 whitespace-pre-wrap" lang="ko">
+                <p className="text-base leading-relaxed text-ink-900 dark:text-ink-100 whitespace-pre-wrap" lang={subject.language}>
                   {t.skipped ? <em className="text-ink-400">(skipped this question)</em> : t.text}
                 </p>
                 {urls[t.id] && <AudioButton url={urls[t.id]} />}

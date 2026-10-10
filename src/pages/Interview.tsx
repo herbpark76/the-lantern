@@ -1,10 +1,121 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Mic, Square, RotateCcw, SkipForward, Volume2, Loader2, Keyboard, Send, X } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import { interviewApi, InterviewError, pickRecorderMime, SILENT_WAV, type InterviewState, type Question } from "@/lib/interview";
+import { interviewApi, InterviewError, pickRecorderMime, setInterviewSlug, SILENT_WAV, type InterviewChoice, type InterviewState, type Question } from "@/lib/interview";
 
-// Voice-first interview page for the person telling her story.
-// Korean only, large type, one big button. Designed for an iPhone held in one hand.
+// Voice-first interview page. Large type, one big button, designed for an iPhone held in one hand.
+// Korean for the memoir interviews (Mom); English for ghostwriter projects (/interview/<slug>).
+
+type Lang = "ko" | "en";
+
+const STR = {
+  ko: {
+    title: "이야기 시간",
+    micDenied: "마이크를 쓸 수 없어요. 설정에서 마이크를 허용해 주세요.",
+    tapWhenReady: "준비되시면 말하기를 눌러 주세요.",
+    sayMore: "조금 더 길게 말씀해 주세요.",
+    notHeard: "잘 못 들었어요. 다시 한 번 말씀해 주시겠어요?",
+    sayAgain: "다시 말씀해 주세요.",
+    stuck: "잠깐 문제가 생겼어요",
+    retry: "다시 시도",
+    relogin: "다시 로그인하기",
+    switchAccount: "다른 계정으로 들어가기",
+    preparing: "아직 준비 중이에요",
+    preparingSub: "아드님께 말씀해 주세요.",
+    hello: (h: string) => `안녕하세요, ${h}`,
+    resumeQ: "지난번 이야기를 이어서 할까요?",
+    invite: (h: string) => <>오늘도 {h} 이야기를<br />들려주세요.</>,
+    resumeBtn: "이어서 하기",
+    startBtn: "시작하기",
+    hintAuto: <>질문이 끝나면 바로 들을게요.<br />편하게 말씀하시고, 다 하시면 잠깐 쉬세요.</>,
+    hintManual: <>질문을 들으시고, 큰 동그라미 버튼을<br />눌러서 편하게 말씀하시면 돼요.</>,
+    thanks: "오늘도 고맙습니다",
+    home: "처음으로",
+    playQ: "질문 듣기",
+    replayQ: "다시 듣기",
+    youSaid: (h: string) => `${h} 말씀`,
+    thinking: "듣고 있어요…",
+    asking: "질문하는 중…",
+    placeholder: "여기에 써 주세요",
+    close: "닫기",
+    send: "보내기",
+    done: "다 했어요",
+    speak: "말하기",
+    countdown: (n: number) => `${n}초 뒤에 넘어가요…`,
+    listeningTimed: (t: string) => `${t}  듣고 있어요…`,
+    listening: "말씀하세요. 듣고 있어요…",
+    manualTimed: (t: string) => `${t}  말씀하세요…`,
+    tapToSpeak: "누르고 말씀하세요",
+    pauseHint: "다 말씀하시면 잠깐 쉬세요. 알아서 넘어가요.",
+    redo: "다시 말하기",
+    skip: "넘어갈게요",
+    type: "글로 쓰기",
+    auto: (on: boolean) => `자동 듣기 ${on ? "켜짐" : "꺼짐"}`,
+    endQ: "끝낼까요?",
+    yes: "네",
+    no: "아니요",
+    end: "오늘은 여기까지",
+    email: "이메일",
+    password: "비밀번호",
+    loginErr: "이메일이나 비밀번호가 맞지 않아요.",
+    wait: "잠시만요…",
+    enter: "들어가기",
+    choose: "어떤 이야기를 할까요? · Which story?",
+  },
+  en: {
+    title: "Story session",
+    micDenied: "I can't use the microphone. Please allow it in Settings.",
+    tapWhenReady: "Tap Speak when you're ready.",
+    sayMore: "That was very short. Try again?",
+    notHeard: "I didn't catch that. Could you say it again?",
+    sayAgain: "Go ahead, say it again.",
+    stuck: "Something went wrong",
+    retry: "Try again",
+    relogin: "Sign in again",
+    switchAccount: "Use a different account",
+    preparing: "Not set up yet",
+    preparingSub: "This interview hasn't been created in Studio yet.",
+    hello: (h: string) => `Hi, ${h}`,
+    resumeQ: "Pick up where we left off?",
+    invite: () => <>Let's find your story.<br />I'll ask, you talk.</>,
+    resumeBtn: "Continue",
+    startBtn: "Start",
+    hintAuto: <>I'll start listening when each question ends.<br />Pause for a few seconds when you're done.</>,
+    hintManual: <>Listen to the question, then tap<br />the big button and talk.</>,
+    thanks: "Thanks — that's a wrap",
+    home: "Back to start",
+    playQ: "Play question",
+    replayQ: "Replay",
+    youSaid: () => "You said",
+    thinking: "Thinking…",
+    asking: "Asking…",
+    placeholder: "Type your answer",
+    close: "Close",
+    send: "Send",
+    done: "Done",
+    speak: "Speak",
+    countdown: (n: number) => `Moving on in ${n}s…`,
+    listeningTimed: (t: string) => `${t}  listening…`,
+    listening: "Go ahead, I'm listening…",
+    manualTimed: (t: string) => `${t}  talk…`,
+    tapToSpeak: "Tap and talk",
+    pauseHint: "When you're done, just pause. I'll move on.",
+    redo: "Redo answer",
+    skip: "Skip",
+    type: "Type instead",
+    auto: (on: boolean) => `Auto-listen ${on ? "on" : "off"}`,
+    endQ: "Wrap up?",
+    yes: "Yes",
+    no: "No",
+    end: "Finish",
+    email: "Email",
+    password: "Password",
+    loginErr: "That email or password didn't work.",
+    wait: "One moment…",
+    enter: "Sign in",
+    choose: "Which story? · 어떤 이야기를 할까요?",
+  },
+};
 
 type Phase =
   | "loading"
@@ -23,7 +134,8 @@ const SILENCE_MS = 10_000;
 const NO_SPEECH_MS = 60_000;
 const SILENCE_COUNTDOWN_FROM_MS = 4_000;
 
-export function InterviewPage() {
+export function InterviewPage({ slug }: { slug?: string }) {
+  setInterviewSlug(slug);
   const { session: authSession, loading: authLoading } = useAuth();
   const [stuck, setStuck] = useState(false);
 
@@ -40,6 +152,7 @@ export function InterviewPage() {
     setErrorDetail(err.detail ?? null);
   };
   const [noSubject, setNoSubject] = useState(false);
+  const [choices, setChoices] = useState<InterviewChoice[] | null>(null);
   const [needsTapToPlay, setNeedsTapToPlay] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [closingText, setClosingText] = useState<string | null>(null);
@@ -74,7 +187,10 @@ export function InterviewPage() {
     if (authLoading) return;
     if (!authSession) { setPhase("welcome"); return; }
     interviewApi.state()
-      .then((s) => { setState(s); setQuestion(s.question); setPhase("welcome"); })
+      .then((s) => {
+        if (s.choose) { setChoices(s.choose); setPhase("welcome"); return; }
+        setChoices(null); setState(s); setQuestion(s.question); setPhase("welcome");
+      })
       .catch((e: InterviewError) => {
         // Expired or invalid sign-in: sign out so the login form shows.
         if (e.status === 401) { resetSignIn(); return; }
@@ -82,7 +198,7 @@ export function InterviewPage() {
         else setError(e.message);
         setPhase("welcome");
       });
-  }, [authLoading, authSession]);
+  }, [authLoading, authSession, slug]);
 
   // If loading takes too long, offer a way out instead of spinning forever.
   useEffect(() => {
@@ -91,14 +207,19 @@ export function InterviewPage() {
     return () => window.clearTimeout(t);
   }, [phase, authLoading]);
 
+  // Before we know the interview, a named link (/interview/<slug>) is a ghostwriter project → English.
+  const lang: Lang = state?.subject.language === "en" ? "en" : state?.subject.language === "ko" ? "ko" : slug ? "en" : "ko";
+  const T = STR[lang];
+  const ghost = state?.subject.mode === "ghostwriter";
+
   // Force a light, warm page and keep iOS from bouncing.
   useEffect(() => {
     const root = document.documentElement;
     const hadDark = root.classList.contains("dark");
     root.classList.remove("dark");
-    document.title = "이야기 시간";
     return () => { if (hadDark) root.classList.add("dark"); };
   }, []);
+  useEffect(() => { document.title = T.title; }, [T]);
 
   // ── Wake lock: keep the screen on during a session ──
   const acquireWakeLock = useCallback(async () => {
@@ -274,7 +395,7 @@ export function InterviewPage() {
       setPhase("recording");
     } catch {
       releaseMic();
-      setError("마이크를 쓸 수 없어요. 설정에서 마이크를 허용해 주세요.");
+      setError(T.micDenied);
       setPhase("ready");
     }
   };
@@ -292,12 +413,12 @@ export function InterviewPage() {
     chunksRef.current = [];
     if (discardRef.current) {
       discardRef.current = false;
-      setNotice("준비되시면 말하기를 눌러 주세요.");
+      setNotice(T.tapWhenReady);
       setPhase("ready");
       return;
     }
     if (durationMs < MIN_RECORD_MS || blob.size < 1000) {
-      setNotice("조금 더 길게 말씀해 주세요.");
+      setNotice(T.sayMore);
       setPhase("ready");
       return;
     }
@@ -305,7 +426,7 @@ export function InterviewPage() {
     try {
       const r = await interviewApi.answerAudio(blob, durationMs);
       if (r.not_heard) {
-        setNotice(r.message ?? "잘 못 들었어요. 다시 한 번 말씀해 주시겠어요?");
+        setNotice(r.message ?? T.notHeard);
         setPhase("ready");
         if (autoListenRef.current) window.setTimeout(() => { if (phaseRef.current === "ready") startRecording(); }, 1200);
         return;
@@ -362,7 +483,7 @@ export function InterviewPage() {
       const s = await interviewApi.redo();
       setHerText(null);
       setQuestion(s.question);
-      setNotice("다시 말씀해 주세요.");
+      setNotice(T.sayAgain);
       setPhase("ready");
       if (autoListenRef.current) window.setTimeout(() => { if (phaseRef.current === "ready") startRecording(); }, 800);
     } catch (e) {
@@ -428,15 +549,15 @@ export function InterviewPage() {
   useEffect(() => () => { stopTimer(); releaseMic(); stopAudio(); audioCtxRef.current?.close().catch(() => {}); }, []);
 
   // ── Render ──
-  const honorific = state?.subject.honorific ?? "어머니";
+  const honorific = state?.subject.honorific ?? (lang === "ko" ? "어머니" : "");
 
   if ((phase === "loading" || authLoading) && stuck) {
     return (
       <Shell>
         <div className="flex-1 flex flex-col items-center justify-center text-center gap-6 px-2">
-          <p className="text-3xl font-semibold">잠깐 문제가 생겼어요</p>
-          <button onClick={() => window.location.reload()} className="w-full max-w-xs py-5 rounded-3xl bg-[#b0642e] text-white text-2xl font-semibold">다시 시도</button>
-          <SwitchAccount onClick={resetSignIn} label="다시 로그인하기" />
+          <p className="text-3xl font-semibold">{T.stuck}</p>
+          <button onClick={() => window.location.reload()} className="w-full max-w-xs py-5 rounded-3xl bg-[#b0642e] text-white text-2xl font-semibold">{T.retry}</button>
+          <SwitchAccount onClick={resetSignIn} label={T.relogin} />
         </div>
       </Shell>
     );
@@ -446,15 +567,33 @@ export function InterviewPage() {
     return <Shell><div className="flex-1 flex items-center justify-center"><Loader2 size={40} className="animate-spin text-[#b0642e]" /></div></Shell>;
   }
 
-  if (!authSession) return <Shell><KoreanLogin /></Shell>;
+  if (!authSession) return <Shell><Login T={T} /></Shell>;
+
+  if (choices) {
+    return (
+      <Shell>
+        <div className="flex-1 flex flex-col justify-center gap-4 px-2">
+          <p className="text-3xl font-semibold mb-2 text-center">{T.choose}</p>
+          {choices.map((c) => (
+            <a key={c.story_slug} href={`/interview/${c.story_slug}`}
+              className="block w-full py-5 px-5 rounded-3xl bg-white border border-[#e8e4dc] shadow-sm">
+              <span className="block text-2xl font-semibold">{c.story_slug}</span>
+              <span className="block text-base text-[#7a7160]">{c.mode === "ghostwriter" ? "Ghostwriter" : "Memoir"} · {c.display_name}</span>
+            </a>
+          ))}
+          <SwitchAccount onClick={resetSignIn} label={T.switchAccount} />
+        </div>
+      </Shell>
+    );
+  }
 
   if (noSubject) {
     return (
       <Shell>
         <div className="flex-1 flex flex-col items-center justify-center text-center gap-4 px-2">
-          <p className="text-3xl font-semibold">아직 준비 중이에요</p>
-          <p className="text-xl text-[#5c5447]">아드님께 말씀해 주세요.</p>
-          <SwitchAccount onClick={resetSignIn} />
+          <p className="text-3xl font-semibold">{T.preparing}</p>
+          <p className="text-xl text-[#5c5447]">{T.preparingSub}</p>
+          <SwitchAccount onClick={resetSignIn} label={T.switchAccount} />
         </div>
       </Shell>
     );
@@ -466,24 +605,22 @@ export function InterviewPage() {
       <Shell>
         <div className="flex-1 flex flex-col items-center justify-center text-center gap-8 px-2">
           <div className="space-y-3">
-            <p className="text-4xl font-semibold leading-snug">안녕하세요, {honorific}</p>
+            <p className="text-4xl font-semibold leading-snug">{T.hello(honorific)}</p>
             <p className="text-2xl text-[#5c5447] leading-relaxed">
-              {resuming ? "지난번 이야기를 이어서 할까요?" : <>오늘도 {honorific} 이야기를<br />들려주세요.</>}
+              {resuming ? T.resumeQ : T.invite(honorific)}
             </p>
           </div>
           <button
             onClick={handleBegin}
             className="w-full max-w-xs py-6 rounded-3xl bg-[#b0642e] text-white text-3xl font-semibold shadow-lg active:scale-[0.98] transition-transform"
           >
-            {resuming ? "이어서 하기" : "시작하기"}
+            {resuming ? T.resumeBtn : T.startBtn}
           </button>
           {error && <p className="text-xl text-[#b04a4a]">{error}</p>}
           <p className="text-lg text-[#7a7160] leading-relaxed">
-            {autoListen
-              ? <>질문이 끝나면 바로 들을게요.<br />편하게 말씀하시고, 다 하시면 잠깐 쉬세요.</>
-              : <>질문을 들으시고, 큰 동그라미 버튼을<br />눌러서 편하게 말씀하시면 돼요.</>}
+            {autoListen ? T.hintAuto : T.hintManual}
           </p>
-          <SwitchAccount onClick={resetSignIn} />
+          <SwitchAccount onClick={resetSignIn} label={T.switchAccount} />
         </div>
       </Shell>
     );
@@ -493,13 +630,19 @@ export function InterviewPage() {
     return (
       <Shell>
         <div className="flex-1 flex flex-col items-center justify-center text-center gap-8 px-2">
-          <p className="text-4xl font-semibold">오늘도 고맙습니다</p>
+          <p className="text-4xl font-semibold">{T.thanks}</p>
           {closingText && <p className="text-2xl leading-relaxed text-[#453f35]">{closingText}</p>}
+          {ghost && (
+            <p className="text-lg text-[#7a7160] leading-relaxed">
+              The story bible, outline and opening chapter take a few minutes.
+              They'll show up in <a href="/studio" className="underline underline-offset-4">Studio → Book</a>.
+            </p>
+          )}
           <button
             onClick={() => { setState((s) => s ? { ...s, session: null } : s); setQuestion(null); setHerText(null); setPhase("welcome"); }}
             className="w-full max-w-xs py-5 rounded-3xl bg-[#efe8dc] text-[#453f35] text-2xl font-semibold"
           >
-            처음으로
+            {T.home}
           </button>
         </div>
       </Shell>
@@ -524,7 +667,7 @@ export function InterviewPage() {
         <div className="mt-3 flex gap-3">
           {question?.audio_url && !recording && !thinking && (
             <button onClick={replay} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-[#efe8dc] text-[#453f35] text-lg">
-              <Volume2 size={24} /> {needsTapToPlay ? "질문 듣기" : "다시 듣기"}
+              <Volume2 size={24} /> {needsTapToPlay ? T.playQ : T.replayQ}
             </button>
           )}
         </div>
@@ -533,7 +676,7 @@ export function InterviewPage() {
       {/* Her last answer */}
       {herText && !recording && (
         <div className="mb-2 rounded-2xl bg-white/70 border border-[#e8e4dc] px-4 py-2.5">
-          <p className="text-sm text-[#7a7160] mb-0.5">{honorific} 말씀</p>
+          <p className="text-sm text-[#7a7160] mb-0.5">{T.youSaid(honorific)}</p>
           <p className="text-lg leading-relaxed text-[#453f35] line-clamp-3">{herText}</p>
         </div>
       )}
@@ -543,8 +686,8 @@ export function InterviewPage() {
         {notice && <p className="text-xl text-[#b0642e]">{notice}</p>}
         {error && <p className="text-xl text-[#b04a4a]">{error}</p>}
         {error && errorDetail && <p className="text-xs text-[#a89f8e] mt-1 break-all">{errorDetail}</p>}
-        {thinking && <p className="text-xl text-[#7a7160] flex items-center justify-center gap-2"><Loader2 size={22} className="animate-spin" /> 듣고 있어요…</p>}
-        {speaking && <p className="text-xl text-[#7a7160]">질문하는 중…</p>}
+        {thinking && <p className="text-xl text-[#7a7160] flex items-center justify-center gap-2"><Loader2 size={22} className="animate-spin" /> {T.thinking}</p>}
+        {speaking && <p className="text-xl text-[#7a7160]">{T.asking}</p>}
       </div>
 
       {/* Big mic button */}
@@ -557,11 +700,11 @@ export function InterviewPage() {
               rows={4}
               autoFocus
               className="w-full rounded-2xl border border-[#d4cec1] bg-white p-4 text-xl leading-relaxed focus:outline-none focus:ring-2 focus:ring-[#d68d56]"
-              placeholder="여기에 써 주세요"
+              placeholder={T.placeholder}
             />
             <div className="flex gap-3">
-              <button onClick={() => setTyping(false)} className="flex-1 py-4 rounded-2xl bg-[#efe8dc] text-xl inline-flex items-center justify-center gap-2"><X size={22} /> 닫기</button>
-              <button onClick={sendTyped} disabled={thinking || !typedText.trim()} className="flex-1 py-4 rounded-2xl bg-[#b0642e] text-white text-xl inline-flex items-center justify-center gap-2 disabled:opacity-50"><Send size={22} /> 보내기</button>
+              <button onClick={() => setTyping(false)} className="flex-1 py-4 rounded-2xl bg-[#efe8dc] text-xl inline-flex items-center justify-center gap-2"><X size={22} /> {T.close}</button>
+              <button onClick={sendTyped} disabled={thinking || !typedText.trim()} className="flex-1 py-4 rounded-2xl bg-[#b0642e] text-white text-xl inline-flex items-center justify-center gap-2 disabled:opacity-50"><Send size={22} /> {T.send}</button>
             </div>
           </div>
         ) : (
@@ -571,7 +714,7 @@ export function InterviewPage() {
               onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (recording) stopRecording(); else startRecording(); } }}
               onContextMenu={(e) => e.preventDefault()}
               disabled={thinking}
-              aria-label={recording ? "다 했어요" : "말하기"}
+              aria-label={recording ? T.done : T.speak}
               style={{ WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none", touchAction: "manipulation" }}
               className={`relative w-40 h-40 rounded-full flex flex-col items-center justify-center gap-1 text-white shadow-xl transition-all active:scale-95 disabled:opacity-40 ${
                 recording ? "bg-[#c95a5a]" : "bg-[#8a8378]"
@@ -579,23 +722,23 @@ export function InterviewPage() {
             >
               {recording && <span className="absolute inset-0 rounded-full bg-[#c95a5a] animate-ping opacity-30" />}
               {recording ? <Square size={40} fill="white" /> : <Mic size={52} />}
-              <span className="text-2xl font-semibold">{recording ? "다 했어요" : "말하기"}</span>
+              <span className="text-2xl font-semibold">{recording ? T.done : T.speak}</span>
             </button>
             <p className="text-lg text-[#5c5447] h-7">
               {recording
                 ? (silenceLeft !== null
-                    ? `${silenceLeft}초 뒤에 넘어가요…`
+                    ? T.countdown(silenceLeft)
                     : autoListen
-                      ? (heardVoice ? `${mm}:${ss}  듣고 있어요…` : "말씀하세요. 듣고 있어요…")
-                      : `${mm}:${ss}  말씀하세요…`)
-                : thinking || speaking ? "" : "누르고 말씀하세요"}
+                      ? (heardVoice ? T.listeningTimed(`${mm}:${ss}`) : T.listening)
+                      : T.manualTimed(`${mm}:${ss}`))
+                : thinking || speaking ? "" : T.tapToSpeak}
             </p>
           </>
         )}
       </div>
 
       {recording && autoListen && (
-        <p className="text-center text-base text-[#7a7160] pb-3">다 말씀하시면 잠깐 쉬세요. 알아서 넘어가요.</p>
+        <p className="text-center text-base text-[#7a7160] pb-3">{T.pauseHint}</p>
       )}
 
       {/* Bottom actions */}
@@ -603,28 +746,28 @@ export function InterviewPage() {
         <div className="pb-1 space-y-2">
           <div className="grid grid-cols-2 gap-3">
             <button onClick={handleRedo} disabled={thinking || !herText} className="py-3.5 rounded-2xl bg-[#efe8dc] text-[#453f35] text-lg inline-flex items-center justify-center gap-2 disabled:opacity-40">
-              <RotateCcw size={20} /> 다시 말하기
+              <RotateCcw size={20} /> {T.redo}
             </button>
             <button onClick={handleSkip} disabled={thinking} className="py-3.5 rounded-2xl bg-[#efe8dc] text-[#453f35] text-lg inline-flex items-center justify-center gap-2 disabled:opacity-40">
-              <SkipForward size={20} /> 넘어갈게요
+              <SkipForward size={20} /> {T.skip}
             </button>
           </div>
           <div className="flex items-center justify-between">
             <button onClick={() => setTyping(true)} disabled={thinking} className="px-2 py-3 text-lg text-[#7a7160] inline-flex items-center gap-2 disabled:opacity-40">
-              <Keyboard size={20} /> 글로 쓰기
+              <Keyboard size={20} /> {T.type}
             </button>
             <button onClick={toggleAutoListen} className="px-2 py-3 text-base text-[#7a7160]">
-              자동 듣기 {autoListen ? "켜짐" : "꺼짐"}
+              {T.auto(autoListen)}
             </button>
             {confirmEnd ? (
               <div className="flex items-center gap-2">
-                <span className="text-lg text-[#453f35]">끝낼까요?</span>
-                <button onClick={handleFinish} className="px-4 py-3 rounded-xl bg-[#453f35] text-white text-lg">네</button>
-                <button onClick={() => setConfirmEnd(false)} className="px-4 py-3 rounded-xl bg-[#efe8dc] text-lg">아니요</button>
+                <span className="text-lg text-[#453f35]">{T.endQ}</span>
+                <button onClick={handleFinish} className="px-4 py-3 rounded-xl bg-[#453f35] text-white text-lg">{T.yes}</button>
+                <button onClick={() => setConfirmEnd(false)} className="px-4 py-3 rounded-xl bg-[#efe8dc] text-lg">{T.no}</button>
               </div>
             ) : (
               <button onClick={() => setConfirmEnd(true)} disabled={thinking} className="px-4 py-3 rounded-xl text-lg text-[#5c5447] border border-[#d4cec1] disabled:opacity-40">
-                오늘은 여기까지
+                {T.end}
               </button>
             )}
           </div>
@@ -650,7 +793,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   );
 }
 
-function SwitchAccount({ onClick, label = "다른 계정으로 들어가기" }: { onClick: () => void; label?: string }) {
+function SwitchAccount({ onClick, label = STR.ko.switchAccount }: { onClick: () => void; label?: string }) {
   return (
     <button onClick={onClick} className="mt-6 text-base text-[#a89f8e] underline underline-offset-4">
       {label}
@@ -669,7 +812,7 @@ function resetSignIn() {
   window.location.reload();
 }
 
-function KoreanLogin() {
+function Login({ T }: { T: (typeof STR)[Lang] }) {
   const { signIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -681,26 +824,26 @@ function KoreanLogin() {
     setBusy(true);
     setErr(null);
     const { error } = await signIn(email.trim(), password);
-    if (error) setErr("이메일이나 비밀번호가 맞지 않아요.");
+    if (error) setErr(T.loginErr);
     setBusy(false);
   };
 
   return (
     <form onSubmit={submit} className="flex-1 flex flex-col justify-center gap-5">
-      <p className="text-4xl font-semibold mb-2">이야기 시간</p>
+      <p className="text-4xl font-semibold mb-2">{T.title}</p>
       <label className="block">
-        <span className="text-xl text-[#5c5447]">이메일</span>
+        <span className="text-xl text-[#5c5447]">{T.email}</span>
         <input type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)}
           className="mt-2 w-full rounded-2xl border border-[#d4cec1] bg-white px-4 py-4 text-2xl" />
       </label>
       <label className="block">
-        <span className="text-xl text-[#5c5447]">비밀번호</span>
+        <span className="text-xl text-[#5c5447]">{T.password}</span>
         <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)}
           className="mt-2 w-full rounded-2xl border border-[#d4cec1] bg-white px-4 py-4 text-2xl" />
       </label>
       {err && <p className="text-xl text-[#b04a4a]">{err}</p>}
       <button type="submit" disabled={busy} className="py-5 rounded-3xl bg-[#b0642e] text-white text-3xl font-semibold disabled:opacity-60">
-        {busy ? "잠시만요…" : "들어가기"}
+        {busy ? T.wait : T.enter}
       </button>
     </form>
   );

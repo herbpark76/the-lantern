@@ -1,6 +1,9 @@
 // Interview Mode: one conversational turn at a time.
 //
 // JSON actions (POST application/json):
+// Every call may name which interview with story_slug (one person can have several);
+// with several and none named, "state" returns { choose: [...] } for a picker.
+//
 //   { action: "state" }                 → subject + active session + current question
 //   { action: "start" }                 → start a session (or return the active one)
 //   { action: "answer_text", text }     → her answer as typed text (testing / fallback)
@@ -11,7 +14,7 @@
 //   action=answer, audio=<file>, duration_ms=<number> → her spoken answer
 
 import {
-  admin, callClaude, cleanSpoken, corsHeaders, estimateCost, getCaller, interviewerSystemPrompt,
+  admin, callClaude, cleanSpoken, corsHeaders, estimateCost, getCaller, systemPromptFor, strings,
   json, jsonError, monthSpend, SERVICE_ROLE_KEY, signedUrl, speechToText, SUPABASE_URL, textToSpeech,
   BUCKET, type ClaudeMessage, type Session, type Subject, type Turn,
 } from "../_shared/interview.ts";
@@ -20,24 +23,12 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2.57.4";
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
 
 const IDLE_CLOSE_HOURS = 6;
-const SKIP_NOTE = "(어머니께서 이 질문은 넘어가고 싶다고 하셨습니다. 다른, 가벼운 질문으로 넘어가 주세요.)";
-
-const MSG = {
-  busy: "잠깐 문제가 생겼어요. 조금 있다가 다시 눌러 주세요.",
-  budget: "이번 달 이야기 시간을 다 썼어요. 아드님께 말씀해 주세요.",
-  noSubject: "아직 준비가 안 됐어요. 아드님께 말씀해 주세요.",
-  notHeard: "잘 못 들었어요. 다시 한 번 말씀해 주시겠어요?",
-};
-
-function startInstruction(subject: Subject, session: Session): string {
-  const first = session.session_no === 1;
-  return first
-    ? `(대화 시작. 이번이 첫 번째 이야기 시간입니다. ${subject.honorific}께 따뜻하게 인사하고, 아드님이 ${subject.honorific}의 이야기를 책으로 쓰려고 준비한 AI 도우미라고 아주 짧게 소개한 뒤, 오늘의 첫 질문을 해 주세요.)`
-    : `(대화 시작. ${session.session_no}번째 이야기 시간입니다. ${subject.honorific}께 반갑게 인사하고, 지난번 이야기를 한 가지 짧게 언급한 뒤, 오늘의 첫 질문을 해 주세요.)`;
-}
+const NO_SUBJECT = "아직 준비가 안 됐어요. 아드님께 말씀해 주세요. (Not set up yet.)";
+const BUSY = "잠깐 문제가 생겼어요. 조금 있다가 다시 눌러 주세요.";
 
 function buildMessages(subject: Subject, session: Session, turns: Turn[], extraUser?: string): ClaudeMessage[] {
-  const msgs: ClaudeMessage[] = [{ role: "user", content: startInstruction(subject, session) }];
+  const L = strings(subject);
+  const msgs: ClaudeMessage[] = [{ role: "user", content: L.start(session.session_no) }];
   const push = (role: "user" | "assistant", content: string) => {
     const last = msgs[msgs.length - 1];
     if (last.role === role) last.content += `\n${content}`;
@@ -45,15 +36,15 @@ function buildMessages(subject: Subject, session: Session, turns: Turn[], extraU
   };
   for (const t of turns) {
     if (t.speaker === "interviewer") push("assistant", t.text);
-    else push("user", t.skipped ? SKIP_NOTE : (t.text || "(말씀이 없으셨어요)"));
+    else push("user", t.skipped ? L.skipNote : (t.text || L.noAnswer));
   }
   if (extraUser) push("user", extraUser);
   return msgs;
 }
 
-async function loadSubject(db: SupabaseClient, userId: string): Promise<Subject | null> {
-  const { data } = await db.from("interview_subjects").select("*").eq("user_id", userId).maybeSingle();
-  return data as Subject | null;
+async function loadSubjects(db: SupabaseClient, userId: string): Promise<Subject[]> {
+  const { data } = await db.from("interview_subjects").select("*").eq("user_id", userId).order("created_at");
+  return (data as Subject[]) ?? [];
 }
 
 async function activeSession(db: SupabaseClient, subjectId: string): Promise<Session | null> {
@@ -112,7 +103,7 @@ async function interviewerSpeaks(
   db: SupabaseClient, subject: Subject, session: Session, turns: Turn[], extraUser?: string,
 ): Promise<{ turn: Turn; audio_url: string | null }> {
   const earlier = await earlierSessions(db, subject.id, session.session_no);
-  const system = interviewerSystemPrompt(subject, session, earlier);
+  const system = systemPromptFor(subject, session, earlier);
   const result = await callClaude(system, buildMessages(subject, session, turns, extraUser), 400);
   const text = cleanSpoken(result.text) || "그 얘기 조금 더 해 주시겠어요?";
 
@@ -142,7 +133,7 @@ async function interviewerSpeaks(
 }
 
 function publicSubject(s: Subject) {
-  return { id: s.id, display_name: s.display_name, honorific: s.honorific, language: s.language };
+  return { id: s.id, display_name: s.display_name, honorific: s.honorific, language: s.language, mode: s.mode, story_slug: s.story_slug };
 }
 
 async function stateResponse(db: SupabaseClient, subject: Subject, session: Session | null, turns: Turn[]) {
@@ -166,9 +157,6 @@ Deno.serve(async (req: Request) => {
     if (!user) return jsonError(401, "Authentication required");
     const db = admin();
 
-    const subject = await loadSubject(db, user.id);
-    if (!subject) return jsonError(404, MSG.noSubject, "no_subject");
-
     const contentType = req.headers.get("content-type") ?? "";
     let action = "";
     let body: Record<string, unknown> = {};
@@ -180,6 +168,17 @@ Deno.serve(async (req: Request) => {
       body = await req.json().catch(() => ({}));
       action = String(body.action ?? "state");
     }
+    const wanted = String((form ? form.get("story_slug") : body.story_slug) ?? "").trim();
+
+    const subjects = await loadSubjects(db, user.id);
+    if (!subjects.length) return jsonError(404, NO_SUBJECT, "no_subject");
+    let subject: Subject | undefined = wanted ? subjects.find((s) => s.story_slug === wanted) : undefined;
+    if (!subject && wanted) return jsonError(404, NO_SUBJECT, "no_subject");
+    if (!subject && subjects.length === 1) subject = subjects[0];
+    if (!subject) {
+      return json({ choose: subjects.map((s) => ({ story_slug: s.story_slug, display_name: s.display_name, mode: s.mode, language: s.language })) });
+    }
+    const MSG = strings(subject);
 
     let session = await activeSession(db, subject.id);
 
@@ -210,7 +209,7 @@ Deno.serve(async (req: Request) => {
           .order("session_no", { ascending: false }).limit(1).maybeSingle();
         const { data: created, error } = await db
           .from("interview_sessions")
-          .insert({ subject_id: subject.id, session_no: ((last as { session_no?: number } | null)?.session_no ?? 0) + 1, era: subject.next_era || "free" })
+          .insert({ subject_id: subject.id, session_no: ((last as { session_no?: number } | null)?.session_no ?? 0) + 1, era: subject.mode === "ghostwriter" ? "free" : (subject.next_era || "free") })
           .select().single();
         if (error) throw new Error(error.message);
         session = created as Session;
@@ -297,7 +296,7 @@ Deno.serve(async (req: Request) => {
         try {
           const { turn, audio_url } = await interviewerSpeaks(
             db, subject, session, turns,
-            `(${subject.honorific}께서 오늘은 여기까지 하자고 하셨습니다. 질문은 하지 말고, 오늘 들려주신 이야기에 따뜻하게 감사드리고, 다음에 또 이야기 나누자고 한두 문장으로 짧게 인사해 주세요.)`,
+            MSG.closing,
           );
           closing = { text: turn.text, audio_url };
         } catch (e) {
@@ -315,6 +314,6 @@ Deno.serve(async (req: Request) => {
     return jsonError(400, `Unknown action: ${action}`);
   } catch (err) {
     console.error("[interview-turn] error", err);
-    return json({ error: MSG.busy, code: "server", detail: String((err as Error)?.message ?? err).slice(0, 220) }, 500);
+    return json({ error: BUSY, code: "server", detail: String((err as Error)?.message ?? err).slice(0, 220) }, 500);
   }
 });
