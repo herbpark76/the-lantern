@@ -418,6 +418,91 @@ function startBackground(action: string, extra: Record<string, unknown>) {
   if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(p);
 }
 
+// ── Notes from Studio (typed or dictated), for any book ───────────────────
+
+function memoirRewriteSystem(subject: Subject, n: number, targetWords: number): string {
+  return `${memoirChapterSystem(subject, n, targetWords)}
+
+You are REVISING the existing chapter given below, not starting over: apply every note from the author (written in English, about the English translation; apply them to the Korean original), keep what the notes don't touch, and keep the chapter's strengths and continuity with the rest of the novel.`;
+}
+
+/** Fold the author's notes into the bible (and plan), and rewrite chapterId if given. */
+async function reviseFromNotes(db: SupabaseClient, slug: string, chapterId: string | null, notesText: string): Promise<void> {
+  const subject = await bookSubject(db, slug);
+  if (!subject) throw new Error("No interview for this book");
+  const memoir = subject.mode === "memoir";
+  const chapters = await bookChapters(db, slug);
+  const target = chapterId ? chapters.find((c) => c.id === chapterId) : undefined;
+  const bibleLang = memoir ? "en" : subject.language;
+  const bible = await currentBible(db, slug, bibleLang);
+  const plan = await currentPlan(db, slug);
+  const notesBlock = `The author's notes${target ? ` on ${docTitle(target, "en")}` : " on the story"}:\n\n${notesText}`;
+
+  // 1. Bible + plan, with the notes folded in.
+  const bibleJob = (async () => {
+    if (memoir) {
+      const material = await memoirMaterial(db, subject, 40_000);
+      const input = [
+        `Current bible:\n${bible || "(none yet)"}`,
+        `Chapters written so far (English):\n${chaptersForPrompt(chapters, "en", 60_000) || "(none yet)"}`,
+        material,
+        `${notesBlock}\n\nFold these notes into the bible and plan; where they change something, the notes win.`,
+      ].join("\n\n=====\n\n");
+      const out = await callClaude(MEMOIR_PLAN_SYSTEM, [{ role: "user", content: input }], 16000);
+      const p = parseSections(out.text, ["bible", "outline", "plan_json", "open_questions"]);
+      await saveBible(db, subject, composeBible(p.bible ?? bible, p.outline ?? "", p.open_questions ?? ""), "Before notes from Studio", parsePlan(p.plan_json), "en");
+    } else {
+      const input = [
+        `Current story bible:\n${bible || "(none yet)"}`,
+        target ? `Chapter discussed: ${docTitle(target, subject.language)}\n\n${docBody(target, subject.language)}` : "No specific chapter: general notes on the story.",
+        `Notes (typed in Studio rather than spoken):\n\n${notesText}`,
+      ].join("\n\n=====\n\n");
+      const out = await callClaude(REVISE_NOTES_SYSTEM, [{ role: "user", content: input }], 16000);
+      const p = parseSections(out.text, ["revision_notes", "bible", "outline", "plan_json", "open_questions"]);
+      await saveBible(db, subject, composeBible(p.bible ?? bible, p.outline ?? "", p.open_questions ?? ""), "Before notes from Studio", parsePlan(p.plan_json));
+    }
+  })();
+
+  // 2. The chapter rewrite.
+  const chapterJob = (async () => {
+    if (!target) return;
+    const brief = chapterBrief(plan, target.position);
+    if (memoir) {
+      const input = [
+        `Story bible (English):\n${bible || "(none yet)"}`,
+        `This chapter's brief from the book plan:\n${brief.text}`,
+        `The current chapter (Korean):\n\n${docBody(target, "ko")}`,
+        notesBlock,
+      ].join("\n\n=====\n\n");
+      const out = await callClaude(memoirRewriteSystem(subject, target.position, brief.targetWords), [{ role: "user", content: input }],
+        Math.min(32000, Math.round(brief.targetWords * 6 * 1.1) + 3000));
+      let md = out.text.trim();
+      if (!md.startsWith("# ")) md = `# 제${target.position}장\n\n${md}`;
+      await snapshot(db, target.id, "Before notes from Studio");
+      await db.from("book_docs").update({
+        title_ko: md.split("\n")[0].replace(/^#\s*/, ""), body_ko: md, body_en: "", updated_at: new Date().toISOString(),
+      }).eq("id", target.id);
+    } else {
+      const input = [
+        `Story bible:\n${bible || "(none yet)"}`,
+        `This chapter's brief from the book plan (follow it unless the notes say otherwise):\n${brief.text}`,
+        `Current chapter:\n\n${docBody(target, subject.language)}`,
+        `Notes from the author (typed in Studio):\n\n${notesText}`,
+      ].join("\n\n=====\n\n");
+      const out = await callClaude(rewriteSystem(subject), [{ role: "user", content: input }], tokensFor(brief.targetWords));
+      await saveChapter(db, subject, target.id, target.position, chapterHeading(out.text, target.position), "Before notes from Studio");
+    }
+  })();
+
+  await Promise.all([bibleJob, chapterJob]);
+  if (target && memoir) {
+    startBackground("translate_chapter", { chapter_id: target.id }); // English follows; stays "generating" until then
+  } else if (target) {
+    await db.from("book_docs").update({ generating: false, gen_error: null }).eq("id", target.id);
+  }
+  await db.from("book_docs").update({ generating: false }).eq("id", `${slug}/bible`).eq("generating", true);
+}
+
 // "Build the chapter plan": restructure the existing bible (and what's written) into the full
 // plan without a new interview. interview-admin sets generating = true on the bible row first.
 async function replan(db: SupabaseClient, slug: string): Promise<Response> {
@@ -575,12 +660,24 @@ Deno.serve(async (req: Request) => {
 
   try {
     const db = admin();
-    const { session_id, skip_github, action, chapter_id, story_slug } = await req.json().catch(() => ({}));
+    const { session_id, skip_github, action, chapter_id, story_slug, notes: notesParam } = await req.json().catch(() => ({}));
 
     // Background jobs started by interview-admin (service role only).
-    if (action === "write_chapter" || action === "replan" || action === "translate_chapter") {
+    if (action === "write_chapter" || action === "replan" || action === "translate_chapter" || action === "revise_notes") {
       const bearer = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
       if (bearer !== SERVICE_ROLE_KEY) return jsonError(403, "Forbidden");
+      if (action === "revise_notes") {
+        const slug = String(story_slug ?? "");
+        const cid = chapter_id ? String(chapter_id) : null;
+        try {
+          await reviseFromNotes(db, slug, cid, String(notesParam ?? ""));
+          return json({ ok: true });
+        } catch (e) {
+          const msg = String((e as Error).message ?? e).slice(0, 300);
+          await db.from("book_docs").update({ generating: false, gen_error: msg }).in("id", [cid ?? "", `${slug}/bible`]);
+          return jsonError(500, msg);
+        }
+      }
       if (action === "translate_chapter") {
         // Answer right away and translate in the background, so the caller isn't held open.
         const job = translateChapter(db, String(chapter_id ?? ""));
@@ -703,7 +800,16 @@ ${transcriptKo}
     }
 
     await db.from("interview_sessions").update(update).eq("id", session.id);
-    return json({ ok: true, github_path: update.github_path ?? null, github_error: update.github_error ?? null });
+
+    // Memoir books with a story bible: fold this session into the bible and chapter plan right away,
+    // so "Create next chapter" works from what she just told us.
+    const bibleId = `${subject.story_slug}/bible`;
+    const { data: bibleRow } = await db.from("book_docs").select("id, generating").eq("id", bibleId).maybeSingle();
+    if (bibleRow && !(bibleRow as { generating?: boolean }).generating) {
+      await db.from("book_docs").update({ generating: true, gen_error: null }).eq("id", bibleId);
+      startBackground("replan", { story_slug: subject.story_slug });
+    }
+    return json({ ok: true, github_path: update.github_path ?? null, github_error: update.github_error ?? null, bible_updating: !!bibleRow });
   } catch (err) {
     console.error("[interview-finish] error", err);
     return jsonError(500, String((err as Error).message ?? err));

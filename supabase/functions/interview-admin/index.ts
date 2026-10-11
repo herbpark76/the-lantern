@@ -6,7 +6,7 @@
 //   { action: "session_audio", session_id }   → { urls: { [turn_id]: signedUrl } }
 //   { action: "delete_session", session_id }  → removes a (test) session + its audio
 
-import { ELEVENLABS_API_KEY, SERVICE_ROLE_KEY, SUPABASE_URL, textToSpeech, type Subject } from "../_shared/interview.ts";
+import { ELEVENLABS_API_KEY, SERVICE_ROLE_KEY, SUPABASE_URL, speechToText, textToSpeech, type Subject } from "../_shared/interview.ts";
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
 import { admin, BUCKET, corsHeaders, getCaller, isStaffUser, json, jsonError, type Turn } from "../_shared/interview.ts";
@@ -22,6 +22,17 @@ Deno.serve(async (req: Request) => {
     if (!user) return jsonError(401, "Authentication required");
     const db = admin();
     if (!(await isStaffUser(db, user.id))) return jsonError(403, "Staff only");
+
+    // Dictated notes from Studio: multipart audio → English text.
+    if ((req.headers.get("content-type") ?? "").includes("multipart/form-data")) {
+      const form = await req.formData();
+      const audio = form.get("audio");
+      if (form.get("action") !== "transcribe" || !(audio instanceof Blob)) return jsonError(400, "audio required");
+      const mime = audio.type || "audio/webm";
+      const ext = mime.includes("mp4") ? "m4a" : mime.includes("ogg") ? "ogg" : "webm";
+      const text = await speechToText(audio, `notes.${ext}`, String(form.get("language") ?? "en"));
+      return json({ text });
+    }
 
     const body = await req.json().catch(() => ({})) as Record<string, string>;
 
@@ -143,6 +154,26 @@ Deno.serve(async (req: Request) => {
       }).catch((e) => console.error("[interview-admin] write_chapter trigger failed", e));
       if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(p);
       return json({ chapter_id: chapterId });
+    }
+
+    // Notes from Studio for any book: { action: "revise_notes", story_slug, chapter_id?, notes }
+    // Rewrites the chapter (old version kept) and folds the notes into the bible, in the background.
+    if (body.action === "revise_notes") {
+      const slug = String(body.story_slug ?? "");
+      const notes = String(body.notes ?? "").trim();
+      if (!notes) return jsonError(400, "Add some notes first");
+      const chapterId = body.chapter_id ? String(body.chapter_id) : null;
+      const { data: busy } = await db.from("book_docs").select("id").eq("story_slug", slug).eq("generating", true).limit(1);
+      if (busy?.length) return jsonError(409, "Something in this book is still being written. Give it a few minutes.");
+      if (chapterId) await db.from("book_docs").update({ generating: true, gen_error: null }).eq("id", chapterId);
+      else await db.from("book_docs").update({ generating: true, gen_error: null }).eq("id", `${slug}/bible`);
+      const p = fetch(`${SUPABASE_URL}/functions/v1/interview-finish`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "revise_notes", story_slug: slug, chapter_id: chapterId, notes }),
+      }).catch((e) => console.error("[interview-admin] revise_notes trigger failed", e));
+      if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(p);
+      return json({ ok: true });
     }
 
     // Rebuild the bible's structure and chapter plan without an interview: { action: "replan", story_slug }

@@ -91,6 +91,7 @@ export function BookTab() {
   const [showPublish, setShowPublish] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [writing, setWriting] = useState(false);
+  const [showNotes, setShowNotes] = useState(false);
   const [lang, setLang] = useState<Lang>(() => {
     try { return (localStorage.getItem("book-lang") as Lang) || "ko"; } catch { return "ko"; }
   });
@@ -306,12 +307,10 @@ export function BookTab() {
           )}
           {doc && !version && !doc.generating && (
             <span className="ml-auto inline-flex flex-wrap gap-2">
-              {englishOnly && (
-                <a href={`/interview/${slug}?revise=${kind === "sample" ? encodeURIComponent(doc.id) : ""}`} target="_blank" rel="noreferrer"
-                  className="btn-secondary !py-2 !px-3 text-sm inline-flex items-center gap-1.5">
-                  <MessageSquare size={15} /> {kind === "sample" ? "Revise this chapter" : "Give notes on the bible"}
-                </a>
-              )}
+              <button onClick={() => setShowNotes((v) => !v)}
+                className={`btn-secondary !py-2 !px-3 text-sm inline-flex items-center gap-1.5 ${showNotes ? "ring-2 ring-accent-400" : ""}`}>
+                <MessageSquare size={15} /> {kind === "sample" ? "Revise this chapter" : "Give notes on the bible"}
+              </button>
               {kind === "summary" && (
                 <button onClick={buildPlan} disabled={writing} className="btn-secondary !py-2 !px-3 text-sm inline-flex items-center gap-1.5"
                   title="Rebuild the three-act structure, plot points and chapter-by-chapter plan from the current bible">
@@ -345,6 +344,18 @@ export function BookTab() {
             <Sparkles size={15} /> Create Chapter 1
           </button>
         </div>
+      )}
+
+      {showNotes && doc && slug && !doc.generating && !version && (
+        <NotesPanel
+          slug={slug}
+          target={kind === "sample" ? doc : null}
+          targetTitle={titleOf(doc, "en")}
+          memoir={!englishOnly}
+          voiceLink={myInterviewSlugs.includes(slug) && englishOnly
+            ? `/interview/${slug}?revise=${kind === "sample" ? encodeURIComponent(doc.id) : ""}` : null}
+          onStarted={async () => { setShowNotes(false); await loadDocs(); }}
+        />
       )}
 
       {version && (
@@ -395,6 +406,87 @@ export function BookTab() {
       ) : (
         <p className="text-sm text-ink-500 font-sans">Nothing here yet.</p>
       )}
+    </div>
+  );
+}
+
+// ── Notes on a chapter (or the bible), typed or dictated ─────────────────
+
+function NotesPanel({ slug, target, targetTitle, memoir, voiceLink, onStarted }: {
+  slug: string; target: BookDoc | null; targetTitle: string; memoir: boolean; voiceLink: string | null; onStarted: () => void;
+}) {
+  const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const recRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+
+  const toggleDictation = async () => {
+    setError(null);
+    if (recording) { recRef.current?.stop(); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mime = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find((m) => MediaRecorder.isTypeSupported?.(m));
+      const rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      chunksRef.current = [];
+      rec.ondataavailable = (e) => { if (e.data.size) chunksRef.current.push(e.data); };
+      rec.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        setRecording(false);
+        const blob = new Blob(chunksRef.current, { type: (rec.mimeType || "audio/webm").split(";")[0] });
+        if (blob.size < 1000) return;
+        setTranscribing(true);
+        try {
+          const r = await interviewApi.transcribe(blob, "en");
+          setNotes((n) => (n.trim() ? `${n.trim()}\n\n` : "") + r.text.trim());
+        } catch (e) { setError((e as Error).message); }
+        setTranscribing(false);
+      };
+      recRef.current = rec;
+      rec.start(1000);
+      setRecording(true);
+    } catch { setError("Couldn't use the microphone. Allow it in the browser and try again."); }
+  };
+
+  const submit = async () => {
+    setBusy(true); setError(null);
+    try {
+      await interviewApi.reviseNotes(slug, target?.id ?? null, notes.trim());
+      onStarted();
+    } catch (e) { setError((e as Error).message); }
+    setBusy(false);
+  };
+
+  return (
+    <div className="card p-5 space-y-3 font-sans">
+      <div>
+        <h3 className="font-serif text-lg text-ink-900 dark:text-ink-50">{target ? `Notes on ${targetTitle}` : "Notes on the story"}</h3>
+        <p className="text-sm text-ink-500 mt-1">
+          {target
+            ? <>Say what to change, deepen, cut or add. The chapter is rewritten with your notes{memoir ? " (in Korean, then the English translation)" : ""}, the story bible and plan take them in, and the current version is kept so you can switch back.</>
+            : <>Anything about characters, plot, tone or where the story goes. The story bible and chapter plan are updated; no chapter is rewritten.</>}
+        </p>
+      </div>
+      <textarea className="input-field !py-2 text-sm" rows={6} value={notes} onChange={(e) => setNotes(e.target.value)}
+        placeholder={target ? "e.g. Slow down the scene at the market. Her aunt should be funnier and louder. Cut the part about the radio. End the chapter on the bread, not the report card." : "e.g. The brother should be more sympathetic later on…"} />
+      <div className="flex flex-wrap items-center gap-2">
+        <button onClick={toggleDictation} disabled={transcribing || busy}
+          className={`btn-secondary !py-2 !px-3 text-sm inline-flex items-center gap-1.5 ${recording ? "!bg-[#c95a5a] !text-white" : ""}`}>
+          {transcribing ? <Loader2 size={14} className="animate-spin" /> : <Mic size={14} />}
+          {recording ? "Stop dictating" : transcribing ? "Transcribing…" : "Dictate"}
+        </button>
+        <button onClick={submit} disabled={busy || recording || transcribing || !notes.trim()} className="btn-primary !py-2 !px-3 text-sm">
+          {busy ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />} {target ? "Revise the chapter" : "Update the bible"}
+        </button>
+        {voiceLink && (
+          <a href={voiceLink} target="_blank" rel="noreferrer" className="text-sm text-accent-600 underline ml-auto">
+            Or talk it through with the editor
+          </a>
+        )}
+      </div>
+      {error && <p className="text-xs text-error-600">{error}</p>}
     </div>
   );
 }

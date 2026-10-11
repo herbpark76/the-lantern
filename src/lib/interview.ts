@@ -208,6 +208,15 @@ export const interviewApi = {
     invoke<{ ok: boolean; status: string }>("interview-admin", { action: "unpublish_book", story_slug }),
   writeChapter: (story_slug: string, chapter_id?: string) =>
     invoke<{ chapter_id: string }>("interview-admin", { action: "write_chapter", story_slug, ...(chapter_id ? { chapter_id } : {}) }),
+  reviseNotes: (story_slug: string, chapter_id: string | null, notes: string) =>
+    invoke<{ ok: boolean }>("interview-admin", { action: "revise_notes", story_slug, chapter_id, notes }),
+  transcribe: (audio: Blob, language = "en") => {
+    const form = new FormData();
+    form.append("action", "transcribe");
+    form.append("language", language);
+    form.append("audio", audio, audio.type.includes("mp4") ? "notes.m4a" : "notes.webm");
+    return invoke<{ text: string }>("interview-admin", form);
+  },
   replan: (story_slug: string) =>
     invoke<{ ok: boolean; bible_id: string }>("interview-admin", { action: "replan", story_slug }),
   listVoices: () => invoke<{ voices: ElevenVoice[] }>("interview-admin", { action: "list_voices" }),
