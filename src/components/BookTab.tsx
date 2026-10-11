@@ -397,7 +397,7 @@ export function BookTab() {
         </div>
       ) : doc ? (
         <>
-          {doc.gen_error && <p className="text-sm text-error-600 font-sans">The last rewrite failed: {doc.gen_error}</p>}
+          {doc.gen_error && <p className="text-sm text-error-600 font-sans">{doc.kind === "summary" ? "Last update:" : "The last rewrite failed:"} {doc.gen_error}</p>}
           {!version && <AudioBar key={`${doc.id}:${shown}:${doc.updated_at}:${doc.model_id}`} doc={doc} lang={shown} onChanged={loadDocs} />}
           <article lang={shown} className="card px-6 sm:px-10 py-8">
             <Markdown text={body} lang={shown} />

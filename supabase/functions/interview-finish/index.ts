@@ -173,13 +173,33 @@ export interface BookPlan {
 
 function parsePlan(raw: string | undefined): BookPlan | null {
   if (!raw) return null;
-  const text = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+  let text = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+  const m = text.match(/\{[\s\S]*\}/);
+  if (m) text = m[0];
+  for (const candidate of [text, text.replace(/,\s*([}\]])/g, "$1").replace(/[“”]/g, '"')]) {
+    try {
+      const p = JSON.parse(candidate) as BookPlan;
+      if (Array.isArray(p?.chapters) && p.chapters.length) return p;
+    } catch { /* try the next */ }
+  }
+  return null;
+}
+
+const PLAN_JSON_SYSTEM = `Convert a book's structure (written in markdown) into strict JSON. Output ONLY the JSON object, no prose, no code fences, no comments, no trailing commas, exactly this shape:
+{"format":"novel","target_words":60000,"acts":[{"act":1,"summary":"..."}],"plot_points":[{"name":"Inciting incident","chapter":1,"summary":"..."}],"chapters":[{"n":1,"title":"...","act":1,"target_words":3000,"purpose":"...","beats":["...","..."]}]}
+Include every chapter listed. Keep each beat to one short sentence. Use English.`;
+
+/** The plan as JSON: from the model's <plan_json>, or, if that is missing or broken (e.g. cut off), from the outline. */
+async function ensurePlan(parsed: Record<string, string>): Promise<BookPlan | null> {
+  const direct = parsePlan(parsed.plan_json);
+  if (direct) return direct;
+  if (!parsed.outline?.trim()) return null;
   try {
-    const p = JSON.parse(text) as BookPlan;
-    return Array.isArray(p?.chapters) ? p : null;
-  } catch {
-    const m = text.match(/\{[\s\S]*\}/);
-    try { const p = m ? JSON.parse(m[0]) as BookPlan : null; return p && Array.isArray(p.chapters) ? p : null; } catch { return null; }
+    const out = await callClaude(PLAN_JSON_SYSTEM, [{ role: "user", content: parsed.outline }], 12000);
+    return parsePlan(out.text);
+  } catch (e) {
+    console.error("[interview-finish] plan conversion failed", e);
+    return null;
   }
 }
 
@@ -261,10 +281,10 @@ async function finishGhostwriter(
     `This session (#${session.session_no}) transcript:\n\n${transcript}`,
   ].join("\n\n=====\n\n");
 
-  const notes = await callClaude(GW_NOTES_SYSTEM, [{ role: "user", content: input }], 16000);
+  const notes = await callClaude(GW_NOTES_SYSTEM, [{ role: "user", content: input }], 24000);
   const parsed = parseSections(notes.text, ["bible", "outline", "plan_json", "open_questions"]);
   const bibleMd = composeBible(parsed.bible ?? "", parsed.outline ?? "", parsed.open_questions ?? "");
-  await saveBible(db, subject, bibleMd, `Before session ${session.session_no}`, parsePlan(parsed.plan_json));
+  await saveBible(db, subject, bibleMd, `Before session ${session.session_no}`, await ensurePlan(parsed));
 
   const input_tokens = session.input_tokens + notes.input_tokens;
   const output_tokens = session.output_tokens + notes.output_tokens;
@@ -355,9 +375,9 @@ async function replanMemoir(db: SupabaseClient, subject: Subject, slug: string):
     `Chapters written so far (English):\n${chaptersForPrompt(chapters, "en", 80_000) || "(none yet)"}`,
     material,
   ].join("\n\n=====\n\n");
-  const notes = await callClaude(MEMOIR_PLAN_SYSTEM, [{ role: "user", content: input }], 16000);
+  const notes = await callClaude(MEMOIR_PLAN_SYSTEM, [{ role: "user", content: input }], 24000);
   const parsed = parseSections(notes.text, ["bible", "outline", "plan_json", "open_questions"]);
-  const plan = parsePlan(parsed.plan_json);
+  const plan = await ensurePlan(parsed);
   await saveBible(db, subject, composeBible(parsed.bible ?? bible, parsed.outline ?? "", parsed.open_questions ?? ""), "Before rebuilding the plan", plan, "en");
   return plan;
 }
@@ -449,18 +469,18 @@ async function reviseFromNotes(db: SupabaseClient, slug: string, chapterId: stri
         material,
         `${notesBlock}\n\nFold these notes into the bible and plan; where they change something, the notes win.`,
       ].join("\n\n=====\n\n");
-      const out = await callClaude(MEMOIR_PLAN_SYSTEM, [{ role: "user", content: input }], 16000);
+      const out = await callClaude(MEMOIR_PLAN_SYSTEM, [{ role: "user", content: input }], 24000);
       const p = parseSections(out.text, ["bible", "outline", "plan_json", "open_questions"]);
-      await saveBible(db, subject, composeBible(p.bible ?? bible, p.outline ?? "", p.open_questions ?? ""), "Before notes from Studio", parsePlan(p.plan_json), "en");
+      await saveBible(db, subject, composeBible(p.bible ?? bible, p.outline ?? "", p.open_questions ?? ""), "Before notes from Studio", await ensurePlan(p), "en");
     } else {
       const input = [
         `Current story bible:\n${bible || "(none yet)"}`,
         target ? `Chapter discussed: ${docTitle(target, subject.language)}\n\n${docBody(target, subject.language)}` : "No specific chapter: general notes on the story.",
         `Notes (typed in Studio rather than spoken):\n\n${notesText}`,
       ].join("\n\n=====\n\n");
-      const out = await callClaude(REVISE_NOTES_SYSTEM, [{ role: "user", content: input }], 16000);
+      const out = await callClaude(REVISE_NOTES_SYSTEM, [{ role: "user", content: input }], 24000);
       const p = parseSections(out.text, ["revision_notes", "bible", "outline", "plan_json", "open_questions"]);
-      await saveBible(db, subject, composeBible(p.bible ?? bible, p.outline ?? "", p.open_questions ?? ""), "Before notes from Studio", parsePlan(p.plan_json));
+      await saveBible(db, subject, composeBible(p.bible ?? bible, p.outline ?? "", p.open_questions ?? ""), "Before notes from Studio", await ensurePlan(p));
     }
   })();
 
@@ -524,9 +544,9 @@ async function replan(db: SupabaseClient, slug: string): Promise<Response> {
       `The book so far:\n${chaptersForPrompt(chapters, lang, 120_000) || "(no chapters yet)"}`,
       "There is no new interview this time. Rebuild the complete bible, structure and chapter plan from the material above, keeping everything the author has decided.",
     ].join("\n\n=====\n\n");
-    const notes = await callClaude(GW_NOTES_SYSTEM, [{ role: "user", content: input }], 16000);
+    const notes = await callClaude(GW_NOTES_SYSTEM, [{ role: "user", content: input }], 24000);
     const parsed = parseSections(notes.text, ["bible", "outline", "plan_json", "open_questions"]);
-    const plan = parsePlan(parsed.plan_json);
+    const plan = await ensurePlan(parsed);
     await saveBible(db, subject, composeBible(parsed.bible ?? bible, parsed.outline ?? "", parsed.open_questions ?? ""), "Before rebuilding the plan", plan);
     await db.from("book_docs").update({ generating: false, gen_error: plan ? null : "The plan came back unreadable; the bible text was still updated." }).eq("id", bibleId);
     return json({ ok: true, plan: !!plan });
@@ -613,13 +633,13 @@ async function finishRevision(
   ].join("\n\n=====\n\n");
 
   const [notes, rewrite] = await Promise.all([
-    callClaude(REVISE_NOTES_SYSTEM, [{ role: "user", content: notesInput }], 16000),
+    callClaude(REVISE_NOTES_SYSTEM, [{ role: "user", content: notesInput }], 24000),
     target ? callClaude(rewriteSystem(subject), [{ role: "user", content: rewriteInput }], tokensFor(brief?.targetWords ?? 3500)) : Promise.resolve(null),
   ]);
   const parsed = parseSections(notes.text, ["revision_notes", "bible", "outline", "plan_json", "open_questions"]);
   const bibleMd = composeBible(parsed.bible ?? bible, parsed.outline ?? "", parsed.open_questions ?? "");
 
-  await saveBible(db, subject, bibleMd, `Before notes session ${session.session_no}`, parsePlan(parsed.plan_json));
+  await saveBible(db, subject, bibleMd, `Before notes session ${session.session_no}`, await ensurePlan(parsed));
   let chapterMd = "";
   if (target && rewrite?.text.trim()) {
     chapterMd = chapterHeading(rewrite.text, target.position);
