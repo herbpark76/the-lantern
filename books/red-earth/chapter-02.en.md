@@ -1,209 +1,323 @@
-# Chapter 2: First Snow on the Jangdokdae
+# Chapter 2: Grandmother at the Gate
 
 ### 1
 
-When spring came the following year, Daegu was known first for its apple blossoms. After the blossoms fell it would be the turn of the heat trapped in the basin, but for that one short season the willows along the Sincheon embankment took on a yellow-green tinge, and the baskets of mugwort at the mouth of Seomun Market smelled of earth. By then the people who had come through the winter looked somehow loosened in the face. If a face had not loosened, it was usually the face of someone getting through something other than winter.
+Jeongwon first learned the word *yangdan* after the New Year of that year.
 
-It wasn't only the gate of the Heo house that was grand. The whole house was a tidy *hanok*. It was not quite a raised-roof gate, but it was wide enough for two people to walk through shoulder to shoulder, and once inside, the yard lay open at a glance. Under the wall to the right of the yard was the well. Around the back of the main building on the left was the *jangdokdae*. There were more than twenty jars on it. The soy sauce jars, the *doenjang* jars and the *gochujang* jars sat in a row by height, and small crocks were wedged in among them. In those small ones were the things Mother took out when the time came. There was plum syrup, and radish pickled until it turned sweet over the winter, and there was one jar nobody was allowed to look into. Each lid was covered with a square of white cotton cloth, and the cloth was changed every third day. The *jangdokdae* was the most carefully scrubbed place in the house, and from it you could guess nearly all of Mother's temperament.
+On the last night of the old year, her *imo* undid her bundle of holiday clothes, and inside was *jeogori* cloth of *yangdan* meant for her uncle's wife. A sheen ran over the fabric, with small flowers floating faintly on it. Jeongwon laid it across the back of her hand. It was cool and smooth, like resting her hand on water.
 
-Father was a man who gave his heart to the flower bed in front of the *jangdokdae*. He spoke little, and said nothing at all about most of what went on in the house. On days when his voice and Mother's collided, he closed the door of the inner room and opened the newspaper, and when he had read a whole sheet he went back to the first page and read it again. Yet in spring this same Father became talkative, the only time he did. Crouching in the flower bed with a hoe, breaking up the soil, he told the child standing beside him: this is a morning glory, this is a balsam, this is a portulaca. Four-o'clock seeds were black and wrinkled, just like mouse droppings. When he said that if you planted them the flowers opened around four in the afternoon, and that was why people also called it the four-o'clock flower, Father's face was gentler than any face Jeongwon had seen in the house.
+"This here's what they call *yangdan*. It's silk, but with the pattern woven in. Somebody like me puts that on, I'd be sorry for the cloth."
 
-Jeongwon liked that face. But she did not respect it. She was a child who had learned early that the two could stand side by side inside one person.
+Her *imo* said it laughing, but at those words Jeongwon pictured an altogether different person's face. It was her grandmother in Daeyeon-dong, in Busan.
 
-There was no *jeong* in that house. Later Jeongwon would repeat those words many times, but at eleven she did not know it in words. She knew it only at the table. There was an order in which Mother laid out the meal, an order in which people sat, an order in which spoons were lifted. The order never wavered once. Her brother sat down first, and the side dishes tilted toward him. The middle cut of the croaker went on her brother's plate, and the tail end was for the daughters. It was the same with the meat in the soup. Mother never said a word about who got more, so there was nothing to argue about either. An unfairness you can't argue with is the kind that lasts longest.
+Mother had a number of *durumagi*. Ramie, silk, even a quilted one for winter lay folded in her wardrobe, and each season they were aired in the sun once and folded away again. Grandmother had not a single one. When Jeongwon saw her last vacation, she wore a cotton skirt and *jeogori* with the old man's vest layered over them. The cuffs of that vest were frayed. She looked less like someone who treasured her things than someone who didn't even know how to treasure them. It had weighed on Jeongwon's mind for a long time.
 
-There were many in the family, but the house was quiet. In a house with many people, being quiet could sometimes be frightening.
+That night Jeongwon knelt in front of the door to the inner room.
+
+"Eomma, couldn't we make Halmae a *durumagi*? Gray *yangdan* with flowers worked in. It'd suit her so well."
+
+Mother did not lift her eyes from her sewing.
+
+"Your halmae doesn't need a *durumagi*. The old man will see to it."
+
+"Halbae doesn't know about such things."
+
+"A slip of a girl, meddling in grown-ups' business."
+
+That was the end of it. But Jeongwon knew it was not the end but the beginning. There came a time when something you could not get from Mother by asking once turned into something not out of the question if you asked a hundred times. Mother did not take to heart what a person said, but she could not bear it when the same words were repeated in the same place until they wore away. Jeongwon was a child who had found that crack. So the next morning, and the evening after that, she said the same words in the same place.
+
+January went and February went, and haze rose over the Sincheon embankment, and the apricot blossoms bloomed and fell. Three or four times a month Jeongwon knelt before the inner room's door. She did not ask Mother to name a day for going to buy the cloth. She only talked about Halmae's *durumagi*. One day she talked about what the flower pattern should be like, another day about how the collar band might best be attached. It didn't matter that Mother didn't answer. Jeongwon knew she was listening, because the interval at which the needle pierced the cloth had changed, just slightly.
+
+By May, around Dano, Mother asked.
+
+"Have you got money?"
+
+"No, Eomma."
+
+"Then what are you going to do?"
+
+"You make it for her, Eomma."
+
+For a long while Mother said nothing. Then she stuck the needle into the cloth and said:
+
+"I don't like hearing it said I couldn't make my mother-in-law one *durumagi*."
+
+Jeongwon had no idea where those words came from. It was certain Mother did not say them out of fondness for her mother-in-law. Even so, once they were spoken, the matter was settled. Mother did not go to Seomun Market to cut a length of *yangdan*; she had the cloth merchant brought to the house, had him spread his bolts out, and chose from them. Picking one with flowers on a gray ground took half a day. In that eye for cloth, no one could match Mother. That was exactly what Jeongwon noticed. Mother was a woman without warmth, not a woman without skill. And sometimes the skill of a person without warmth carries farther than the heart of a person with it. The garment was sewn to be ready for vacation three months later, wrapped in *hanji*, and tied with cord. When Jeongwon pressed the layers with her fingertips they were smooth and straight.
+
+Mother handed her the bundle without adding a single word. Jeongwon did not say thank you either. Between the two of them it was not that such words were unnecessary; there was simply no road for them to travel.
 
 ### 2
 
-In spring the gomos came.
+That summer's trip to Busan was made alone from start to finish.
 
-Father had six older sisters. Not all six were in Daegu: three were in Daegu, one each in Gyeongsan and Yeongcheon, and the youngest was far away in Busan. Two of the Daegu gomos came through the gate of the Heo house in time for Father's birthday. The eldest gomo was tall with a booming voice, and the third gomo was small and quick of speech. Both wore their hair in a chignon and ramie blouses, and each carried a bundle wrapped in cloth. The smell came walking out of the bundles first.
+Until the year before, a grown-up had gone along. In the summer she became a fifth-grader, Grandfather sent a letter. She could come by herself now. If Jeongwon bought the train ticket and sent word, he would meet her at Busan Station. The brush strokes in ink on *hanji* skipped a little where the brush tip ran dry, and at the end it was signed "from the old man." Mother snorted after reading the letter. But she didn't forbid it.
 
-"Won-ah! Hey, my Won-i, guess what your gomo's brought you."
+Her older sister and younger brother did not go. No one had ever suggested they go, and they had never said they would. Jeongwon never learned the reason in all her life. Only, as a grown woman, she would sometimes think this: that in Grandmother's house they had waited, it seemed, for Jeongwon alone. When only one person is waiting, only one person goes.
 
-"*Kkoji-jeon*, ain't it?"
+The waiting room at Daegu Station was damp with the smell of people. Cheongdo-daek followed Jeongwon out carrying a bundle. Inside it were *yakgwa* and *yugwa* ordered in Gyeongju, octopus sent by her *imo*, and the *durumagi* bundle. Mother was a person who never omitted the proper form even in a gift. What was to be offered to her in-laws she prepared item by item as if measuring with a rule, and though no warmth went into it, there was no fault to be found in it either.
 
-"Aigo, she's a spirit! That lass has the sharpest eye in all eight provinces."
+"Miss, go and eat well and come back. Ajimae's heard many a time that the cooking at that house is the finest anywhere."
 
-The gomos' *kkoji-jeon* was not like what was pan-fried in the Heo kitchen. They boiled burdock and cut it long, marinated beef and cut it to the same length, cut carrot to match, and threaded them side by side on skewers. Then they coated them in flour and egg and fried them in an oiled pan, so the colors came out bright and the lengths even, and each piece looked like a little pole. Seasoned sauce was spooned over the top, made of soy sauce stirred with minced scallion, sesame salt and chili powder, and a single drop of sesame oil. Some years they threaded in pickled radish. The gomos called it *dakkwang*. When that yellow, yellow stuff crunched between the meat and the burdock, Jeongwon's mouth watered before she'd even bitten.
+"Ajimae, what shall I bring you when I come back?"
 
-The food Mother made was more refined and more neat. Jeongwon knew that. Guests marveled at Mother's *gujeolpan*, and her *yugwa* and *yakgwa* had a reputation before they ever reached the table. But in the gomos' burdock *kkoji-jeon* there was something none of Mother's dishes had. It was the wish that you eat. Mother's food was food meant to be looked at.
+Cheongdo-daek looked away for a moment.
 
-The gomos poured out talk the moment they sat down at the table. Yeongcheon Gomo's husband had taken a second woman, and the second woman, of all things, was the one who cut cloth at the market. Gyeongsan Gomo's husband had gambled away his earnings from the market and still carried himself so proudly, how did he manage it? The eldest gomo drove curses into the story every so often, and before she'd finished the third gomo caught it and tossed in a curse of her own. If Imo's cursing was laughter flung into the air, the gomos' cursing was laughter with both feet planted on the ground. Jeongwon sat at the far end of the table, mouth half open, listening. These people talk like folks really living. The thought, before it became words, pooled warm in her chest.
+"What would you bring me? Just go and come back safe."
 
-At the kitchen threshold Cheongdo-daek stood holding a tray, and her eyes met the gomos'. The eldest gomo took the tray from her and set it down.
+The slow train let out one long breath of smoke and began to move. The seats were velvet. Worn and worn, what had been green was now a yellowed, faded light green. Jeongwon sat by the window with the *durumagi* bundle in her lap. She saw the July noon sun come in through the window and raise the velvet's short nap, hair by hair.
 
-"Say, ma'am, why don't you sit and have a bite too? Quit standing there watching."
+The train stopped everywhere. It stopped at Gyeongsan, at Cheongdo, at Miryang. At every station different people got on and off. A woman climbed on balancing a basket on her head, a man sat a child on top of his baggage, an old man wore army trousers and rubber shoes. At Samnangjin the salted-fish sellers swarmed aboard. From the crocks of salted shrimp, anchovy, and cutlassfish-gut the briny reek rose all at once, and the car turned into the middle of the sea. Jeongwon did not mind that smell. The apple seller went about carrying strings of ten or twelve apples bound in straw. When he came, Jeongwon picked over the apples one by one with her eyes. She bought only those with glossy skin and green stems, and any that were bruised or shriveled she waved away and sent back, no matter how cheap he offered them. The seller clicked his tongue as he went by.
 
-Cheongdo-daek was aghast and waved her hands. Mother's gaze had come crossing coldly from the far end of the *daecheong*. The eldest gomo knew that gaze and pretended she didn't. She picked up a piece of *kkoji-jeon* with her own hand and pressed it into Cheongdo-daek's palm. Mother said nothing. But that evening, after the gomos had gone home, Mother made Cheongdo-daek redo the dishes one by one. She had her wash again the plates she had already washed. Jeongwon sat on the kitchen threshold and listened to how long the sound of plates being scrubbed went on without stopping.
+"Little thing, and so shrewd."
+
+Of the apples she bought that way, the very best one was always Grandfather's, the next best Grandmother's. Jeongwon's was what was left. That was no rule. It just came to be so.
+
+In the stretch where the Nakdong River showed outside the window, a brief rain fell. While the shower passed, the air in the car turned suddenly cool and soft. *Cozy*: years later, when she could name that feeling in a foreign tongue, Jeongwon would come to love that word for the rest of her life, but then it had no name, and her chest simply felt warm. The faster this train ran, the nearer she came to Grandfather, the nearer to Grandmother, and in that house waited the things Mother had never once held out to her. With only that thought, Jeongwon could keep her seat, saving it, until the standing passengers got off.
 
 ### 3
 
-In that house, Imo's side and the gomos' side never sat in the same place.
+The sea wind at Busan Station was saltier than at Daegu Station.
 
-No one had decided it, but it had been that way for many years. There were separate days when Imo and Oe-sungmo came and separate days when the gomos came, and Mother arranged the dates so the two sides never met on the same day. Arranging was Mother's work. On the surface Mother seemed fond of the gomos. But Jeongwon knew the tone of Mother's voice when she mentioned their schools. In talk of which girls' school someone had graduated from, Mother drew out "graduated" a little; when she spoke of someone who had graduated from no school, she clipped the end of the sentence short. And whether it went toward Imo or toward the gomos, the direction it took was the same.
+Stepping off the train and walking among the crowd toward the ticket gate, Jeongwon was up on tiptoe. On the far side of the gate stood a tall man. He had stretched his neck up long toward the sky and was waving one hand high above people's heads. Jeongwon could guess how long he had been standing there. There had been an announcement that the train was running two hours late, so he must have stood at least that long. Even so he was smiling brightly, as if he had only just arrived.
 
-Jeongwon was quick at such things. Being quick was not a compliment. It was a word that attached itself to the body of a child who had grown up watching faces a little more each year. Mother's voice dropping by one note, the sound of Father turning his newspaper stretching out, Brother's steps lightening as he crossed the *daecheong*. Jeongwon read every one of them, and being able to read them made her proud and then, at some moment, sad. A house where an eleven-year-old reads the grown-ups' moods first and steps out of the way first is already a house that is sick somewhere.
+Grandfather wore a suit even in summer. A white short-sleeved shirt with no necktie, trousers made of English wool with creases standing sharp as a blade. Among the old men who came from Daegu for the flowers, or among the Busan folk, such height and such bearing were rare. Since she was small Jeongwon had been proud of that bearing. She felt like announcing to each person coming out of the gate that this fine old gentleman was her grandfather.
 
-On days when Imo's people and the gomos sat apart, Jeongwon hurried back and forth between the two places. In the *sarangbang* where Imo sat, she laughed at the savory talk; in the *anbang* where the gomos sat, she laughed where the dialect bent around a word. She tried not to go to the veranda where Mother was. The grown-ups saw the child going between them as merely cute. Only Mother was counting, one by one, the directions the child went. Jeongwon knew that eye was fixed on her back. It was an eye measuring which room she laughed longer in.
+"Halbae!"
+
+"Oi, our Jeongwon's here."
+
+Taking the bundle from her hand, Grandfather looked her over once, head to shoes, as if checking a parcel that had come a long way. Then he said:
+
+"Ain't you growing. You've gotten bigger since I saw you."
+
+"I haven't grown. I'm always the same."
+
+"To your halbae's eyes, you've grown."
+
+Taxis stood in a row in front of the station. Jeongwon knew this did not fit her grandparents' way of living. The two of them did not usually ride taxis. The old man was rich, but he was careful with every coin, walked wherever he could walk, and took the bus wherever a bus would do. Yet on the day their granddaughter came, they called a taxi. The leather seat inside was hot, and Busan's streets slid slowly backward outside the window. The sea off Yeongdo flashed into view, and the harbor cranes hung against the sky.
+
+"Did you do your lessons well and keep well?"
+
+"Yes."
+
+"What place did you get on this exam?"
+
+"First."
+
+"That's it, that's it. Well done." Grandfather nodded, and a little later asked, "Your mother didn't scold you any?"
+
+Jeongwon could not answer. That question was not of the same grain as the others. The others had been about his granddaughter's marks and her well-being; this one alone was about her mother. And it was neither speaking ill of her mother nor defending her, but a careful feeling at the inside of things. In that question Jeongwon could not tell whether Grandfather was looking at his son's wife or at his granddaughter.
+
+So she brought out a question she had long held in her heart. Perhaps it was a question that could be asked only in this taxi.
+
+"Halbae, I don't know if I should ask this. Why does Eomma hate *Gomo* so much? I like *Gomo*."
+
+Grandfather's hand moved on his knee, ever so slightly.
+
+"That's how it is with folks living."
+
+"But then why is it that way?"
+
+"You'll know when you're grown. When you're grown you'll know that too, and someday you'll know it all. You're too young yet to know."
+
+He did not look at Jeongwon as he said it. He looked out the window. The muscle in his cheek, in profile, moved faintly. It was a sorrowful face. Jeongwon never forgot that face all her life. It was not a sorrow an eleven-year-old girl could read, but even if she could not read it, she could engrave it. And what is engraved is not erased by the passing years.
+
+Since she was small Jeongwon had harbored a secret suspicion. She suspected that Mother might be a stepmother. It seemed strange to her that everyone in the world doted on her while only Mother treated her differently, and from some time on she had come to think such things. But looking at Grandfather's face reflected in the taxi window, Jeongwon thought for the first time of another possibility. Perhaps this didn't begin with me. Perhaps it is something that began before me, before I was even born.
 
 ### 4
 
-The alleys of Samdeok-dong were covered with ivy that year too.
+Daeyeon-dong then was not part of the city.
 
-Houses where Japanese had lived in the colonial period and then left stayed behind under the name *jeoksan gaok*, and formed alleys here and there in Daegu, and Samdeok-dong had especially many. The walls were low stone walls, and ivy climbed over their shoulders. Beside them were improved *hanok*, and tidy tile-roofed houses where families had lived for generations, like Jeongwon's father's family. Over one house's fence a rose vine climbed and in May poured out all its red at once. In the alleys where cars never came, children's laughter spilled over the walls, and near where the sound ended a tofu seller's bell rang.
+The taxi turned onto a road not yet paved and jolted along for a long while, and when it stopped it was at a spot where the sea opened out in front and a low hill embraced it from the side. The house was not big. Rich as they were, it had none of the grandeur of the Heo family's house in Daegu. But in Jeongwon's eyes that house was a palace. Perhaps not because the house was a palace, but because the person standing before it was making one.
 
-Halbae and Halmae lived deep inside the Samdeok-dong alleys. They were Father's parents, an old couple who had borne and raised six daughters and two sons. When Jeongwon came, Halbae took her hand first, and Halmae, behind them, shook out the hem of her skirt once. Then the two of them, with Jeongwon between them, walked through the alley to the gomos' houses. One house, then another. At one house they brought out *gamju*; at another they brought out mugwort rice cake. The faces of grown-ups watching a child eat were so gentle.
+Grandmother stood at the *sapjak* gate.
 
-"Won-i, you mind your elders, so you're a good girl."
+Jeongwon knew at a glance that Grandmother had been standing there since long before the car stopped. Ever since the news came in the early morning that the train was late, she must have been unable to sit inside the house, and had come out past the gate and been looking down the road. In her hand she clutched a white handkerchief. When Jeongwon opened the taxi door and got out, Grandmother pressed the handkerchief to the corners of her eyes. She wiped, and wiped, and wiped again. No matter how she wiped, tears kept welling up.
 
-What Halbae said was short. But Jeongwon found it strange how that short saying stayed in her chest longer than anything Mother said at length.
+"Halmae!"
 
-That late spring Halbae pressed a few bills into Jeongwon's hand.
+Jeongwon flew to her without even setting down her bag. Grandmother's embrace was soft and firm. Her cotton *jeogori* smelled of grass dried in the sun and of boiled grain. Jeongwon buried her face in Grandmother's arms and cried. She didn't know why she cried. Only that it was sad to have this embrace, and the sadness was itself joy. In eleven years of living she had never once been held in Mother's arms, and now that she was held, so this is what it is like, the thought crept over her. But she did not say it aloud, not even inside herself.
 
-"Take this and buy crayons. They say there's Japanese ones. Sakura crayons, they call 'em."
+"Aigu, my little one. You've had a hard time getting here. Hungry, aren't you? I've steamed corn."
 
-"Halbae, Japanese ones must be dear."
+Grandmother stroked down Jeongwon's back. Over Jeongwon, held in that embrace, Grandfather's big hand came and patted her head once. The two of them said nothing. Grandfather was known as the man who loved his wife most in all the world, and even in old age his love was unchanged, so that he was shy of taking his wife's hand before others. That love was now gathering in one place through their granddaughter.
 
-"Dear, so what? Our Won-i likes drawing."
+A big pot hung in the yard. When the lid came off, steam burst up, and out of it came corn. Glutinous corn, kernels set tight. Bite one and it was sweet and chewy and tasted of barley. Grandmother had been steaming this since the word of Jeongwon's coming reached her. She had steamed a pot every third day, and for the day Jeongwon arrived she had set another one on. Having heard once that Jeongwon liked corn, Grandmother had never forgotten it. In the old days love was mostly expressed through food. Not because words were lacking, but because food is what words cannot fully say.
 
-The money went neither to her brother nor to her sister nor to her younger sibling. Jeongwon knew that, and as she folded the bills into the inside pocket of her coat, her heart pounded. It was less joy than fear. No one must learn that this money had come only to Jeongwon. The moment they did, the order of this house would try to turn itself over toward one child.
+Beside the corn were roasted sweet potatoes, boiled potatoes, and steamed eggplant. In one corner of the yard there was a sesame plot and a sweet potato patch, and beyond the wall cornstalks stood in rows. Grandfather raised these without using so much as a drop of pesticide. After he had lived as a great landowner in the country and given up nearly all his land and come down to Busan, the old man's hobby was tilling even a palm's breadth of ground with devotion.
 
-Jeongwon bought the crayons and tucked them between the winter quilts on the bottom shelf of the quilt chest. It was a flat box holding twelve colors side by side. She held the unwrapped blue once to her nose. It smelled of beeswax. It was the smell of something not yet used. She meant to use them sparingly, and she did not mean to show them to anyone.
-
-But her sister was quick. In that she had some edge over Jeongwon. One day while Jeongwon was at school, her sister opened the quilt chest. She was a child who liked money, and anything that gave off the smell of money could not escape her nose. The crayon box moved into her sister's school bag, and the next day it was swapped at the neighborhood stationery shop for something else. By the time Jeongwon found out, the crayons were already gone.
-
-"Eonni, you took my crayons, didn't you?"
-
-"What're you on about? Why'd I take yours?"
-
-"Halbae said buy 'em, so I bought 'em."
-
-Then Mother's voice came across from the inner room.
-
-"Quiet! Over one crayon, what's all this noise between siblings? And you, why do you talk like that to your big sister?"
-
-The talk ended there. Jeongwon stood for a while just as she was. Her grievance had risen to her throat and had nowhere to go. Mother was on her sister's side. She hadn't asked why, and she thought there was no need to ask. To leave a child who loves money to her love of money, and to love her for it, may have been Mother's way of *jeong*. But that *jeong* passed by and cut an eleven-year-old child who happened to be standing beside it.
-
-That year on the tenth of June the *hwan* became the *won*. Ten old *hwan* became one new *won*, and for several days the grown-ups had to do their sums over again. The children called out to Jeongwon in jest. "Hey, here comes the money, money's here! Won-i, it's Won!" Jeongwon laughed and took it. An eleven-year-old did not much mind her name becoming money. Only the emptiness of the bottom shelf of the quilt chest stayed in her memory a long time.
+Going around behind the house, there was a cliff. That there was a cliff inside the house's fence seemed to Jeongwon the strangest and best thing about the place. Water that flowed out from the small hill above the cliff ran down over the rocks. It was not a big stream. But you could hear it beating on the rock, and when the droplets splashed in the sunlight a rainbow stood for a moment. At the sight of it Jeongwon felt she had arrived. It was the feeling of having reached, at eleven, a place one should have to run a dozen years or more to reach.
 
 ### 5
 
-In summer they went to Oegatjip.
+The dinner table was a big one. In that house the table had never once been small.
 
-To Uiseong they went by bus. If you boarded the slow bus at the stop across from Seomun Market, you rattled along a dirt road in a cloud of dust for two hours or so. Her maternal cousins went too, a girl and a boy. The girl was four years older than Jeongwon, and the boy a year older than the girl. Outside the bus window rice paddies passed, and poplars passed, and at the mouth of one village a yellow ox slowly turned its head and looked at the bus.
+At the edge was Jeongwon's place. Grandfather sat at the head and Grandmother at the foot, looking over the table. They were three at table, but the spread would have been more than enough for ten. Each dish was set down so none overlapped, and even the places for the soy sauce dishes differed.
 
-The Oegatjip in Uiseong was the biggest house in the village. The gate was so tall and so huge that the children got a crick in their necks looking up. The villagers called it only "the big gate," and there was no need to say whose house it was. Push through the gate and there was an outer yard, and inside that another yard with the *sarangchae*, the storehouse, the cow shed, the pigsty. Twelve hired hands ate and slept in that house. There was a separate farmhands' room, and its furnace mouth always had bundles of straw stacked beside it.
+Everyone got a piece of fish. Either sea bream or mackerel. That day it was sea bream. Grilled over charcoal, the skin golden and the flesh beneath white as snow. Always at least one dish was *namul*. Bean sprouts, spinach, or *chwinamul*, and this day it was *chwinamul*. The steamed egg puffed up above its earthenware pot, and when you put a spoon to it a cloudlike interior showed. What had gone into it, Jeongwon never worked out in her whole life. Squid was stir-fried or blanched and sliced raw. In Daegu beef mostly appeared on the table, but in this house meat was scarce, and Jeongwon herself liked *namul* better than meat.
 
-Oe-halmeoni was the center of that house. She wasn't tall and her voice wasn't high, but in that house what Oe-halmeoni said became work. One day a laborer asked for one more bowl of *makgeolli* at midmorning break and met Oe-halmeoni's eyes. Oe-halmeoni said nothing, and the laborer set the bowl down as it was and stood up. Jeongwon saw it from the edge of the yard. It wasn't that Oe-halmeoni's eyes cut a person; it was that they set a person in place without adding a word, and Jeongwon didn't forget it for a long time. She had seen a few fierce people by then, but she had never seen someone so solid without being fierce. Later Jeongwon would say it many times: there was no one as truly strong as that. Oe-halmeoni's strength had no blade in it like Mother's coldness, and no softness like Imo's warmth. It was like the ground. That two daughters came out of one mother and grew up so different may have been because that ground was so wide that each simply walked off toward her own side.
+There were three or four kinds of *kimchi*, each served separately. Perilla-leaf *kimchi*, chive *kimchi*, young-radish *kimchi*, and white *kimchi*. White *kimchi* was early for July, but Grandmother, hearing Jeongwon was coming, had put up a crock of it beforehand. When it went into her mouth it had a sharp, stinging taste. It stung like cider. Jeongwon held a piece in her mouth and closed her eyes. Later she would spend her whole life wandering in search of this taste, and never once find it again. In the foreign land, even when she made it with the same ingredients, that sting did not come.
 
-In the evenings a wooden platform was set in the Oegatjip yard. It was a day they had slaughtered a piglet. A cauldron was hung at one side of the yard, and while firewood blazed under it the villagers came over the gate one or two at a time. There was fish too. There was pumpkin *beombeok*, and glutinous-rice *sujebi* with kidney beans and black beans. The *beombeok*, made of boiled, mashed pumpkin with red beans on top, was sweet and thick, and when you pushed a spoon in, the flesh burst hot. Jeongwon kept shoveling it in even as she scalded the roof of her mouth.
+Grandmother's food was mild. Not salty, and not so spicy as to make your eyes fly open. Someone eating it for the first time might call it bland. But after two spoonfuls, three, you felt the ingredients offering their own flavor without hiding it. It was food that did not cover the taste with strong seasoning but let the ingredients speak for themselves. If Mother's food was food eaten with the eyes, Grandmother's was food eaten with the tongue and the belly.
 
-At night the stars poured down. She had never seen such stars in Daegu. The sky was that close, and that full. Even between star and star there were stars. Jeongwon lay on the platform with her mouth open and looked up for a long time.
+"Halmae, how's this steamed egg so soft?"
 
-Then one of the farmhands began a tale from across the dark yard.
+"What's so special about it? I put nothing in."
 
-"Last year 'round this time, you know, a pig in the next village went missing in the night, they say. Come morning they went to look and the pen was wide open, and the tracks went right up the mountain. Some wolf-like beast must've dragged it off."
+"You're lying."
 
-"A wolf?"
+Grandmother only laughed.
 
-"Aye, a wolf. Teeth like so, and eyes blue."
+When the meal was over, Jeongwon went into the room and fetched the bundle wrapped in *hanji*. She held it up in both hands and set it before Grandmother.
 
-The girl cousin pinched Jeongwon's side on purpose. Jeongwon screamed and clung to her. The stars were as many as ever, but the dark between them suddenly seemed alive and moving. Her cousin burst out laughing and rubbed Jeongwon's back. What was frightening turned funny in a moment. That was the knack of Imo's people. The knack of turning frightening things into funny ones.
+"Halmae, undo this."
 
-By day they went to the stream. The stream came down from the foot of the mountain behind the village; in the shallow places it came to the knees, in the deep to about the chest. The children jumped in splashing, wearing only their drawers. When sunlight broke up on the current, minnows darted away inside it. The boy cousin lay on his belly and taught her how to float. The first few times Jeongwon swallowed water through her nose, and still she jumped back in. Afterward, sitting on the bank drying her wet body in the sun, she thought suddenly: I'm not watching anyone's face right now. How long has it been?
+"What's this?"
 
-Later Jeongwon called that place paradise. When she told of that time in a living room in Texas at seventy-five, she still couldn't find any other word for it.
+"Open it and you'll know."
+
+Grandmother wiped her hands and untied the cord. When she opened the *hanji* the gray *yangdan* showed itself. The flower pattern was subtle, and when it caught the light of the oil lamp the shine swept off to one side. Grandmother gazed at it a long while, then drew back her hand without even touching it.
+
+"Aigu, how pretty it is. Whose is this?"
+
+"It's yours, Halmae. Try it on."
+
+"How could I wear a thing like this? An old woman like me."
+
+"You have to try it on now, Halmae. I pestered Eomma six months for it."
+
+Grandfather let out a hearty laugh. Grandmother draped the *durumagi* over her shoulders. At first she smoothed the sleeves awkwardly, but soon she had fastened the cord and tied the ribbon. When the gray *yangdan* wrapped around Grandmother's white hair and straight forehead, a picture stood there. Jeongwon shouted inside her heart: See? What did I tell you? I said this suited Halmae.
+
+Grandmother did not say it aloud, but her eyes had filled with tears. She didn't take out her handkerchief to wipe them, only let them be.
+
+"Your mother must have been badgered something awful. How hard did our Won-i have to nag?"
+
+"No, Halmae, Eomma made it for you."
+
+Saying so, Jeongwon felt a corner of her heart sting. She knew that the reason Mother had made it was not for her mother-in-law but for appearances. But she did not say so. Grandmother probably knew too. Knowing, and acting as if she didn't, she passed two days dressed in that garment. On the third day she wore it out as far as the senior center at the mouth of the village. No other old woman in the neighborhood had a *durumagi* like it. That evening Jeongwon watched Grandmother come back from boasting wordlessly to her friends. A boast that showed without being spoken: Jeongwon thought it the most dignified boast in the world.
+
+The joy Jeongwon felt at seeing Grandmother in that garment was perhaps greater than Grandmother's own. The receiver's joy can be great, but there are times when the giver's joy is greater. That secret an eleven-year-old girl learned that day, and she never threw it away in all her life.
 
 ### 6
 
-In Uiseong they lit the fires at night.
+The next morning opened with the smell of *jaecheopguk*.
 
-Oe-halmeoni got up at dawn and lit the fire in the *sarangbang* furnace, and Jeongwon crouched beside her to help. The help was only pushing in a handful of straw at a time. After the harvest the storehouse was crammed with straw, so much that it had to be burned on purpose. When the straw caught, the flame at first didn't know its way, and then all at once it was sucked in toward the back of the furnace with a whoosh and a crackling *ttadadadadada*. Listening to it, Jeongwon felt something in her chest loosen and go out. It was strange. In front of that furnace Jeongwon never once read anyone's face.
+Before dawn there was a clatter in the kitchen. Jeongwon lay quietly under the quilt and listened. It was Buhui. A girl of sixteen or seventeen who worked in the house, she was learning cooking under Grandmother. Jeongwon did not know her family name; her name was only Buhui. She was short, with round eyes, and when she smiled a dimple dented one cheek. The poor children Jeongwon had seen in Daegu were mostly dark-faced and gloomy, but Buhui was different. A poor family's daughter, yet no shadow lay on her face. Where that came from Jeongwon could not tell, but when the girl was near, she somehow breathed easier.
 
-Once a spark flew and nearly caught the straw stack beside the furnace. Jeongwon cried out in alarm, and Oe-halmeoni came running with a bucket and put the fire out in one throw. Then, without a word, she stroked Jeongwon's singed bangs with her hand. She didn't scold. Later Jeongwon would think that this was the greatest difference between Mother and Oe-halmeoni. Oe-halmeoni looked at the person first, after a thing had happened. Mother scolded the person first, before it happened.
+The *jaecheopguk* was a soup with the clams heaped into each bowl and eggs stirred in until it was thick. Every morning Jeongwon ate a bowlful. When she took one spoonful her insides loosened clean and cool. It was less a soup than a greeting the sea offered in the morning.
 
-On days when Jeongwon stoked the fire, the farmhands' room was a good deal warmer. Twelve of them crowded into the one room every evening and let loose their noisy talk. When Jeongwon got up from in front of the furnace, a roar of laughter burst out inside, and she knew the laughter wasn't about her, but it made her feel strange. Inside, one man was spinning a long story in a low voice, and at one passage the rest toppled over laughing all together.
+"Miss, what'll you do today?"
 
-Jeongwon couldn't laugh along. She didn't know what was funny. The meat of that story lay outside the world Jeongwon knew. That night she went back to her room and asked her girl cousin, but her cousin only tilted her head. The answer came unwound back in Daegu, through her eldest sister's mouth.
+"Buhui, I want to go see the sea."
 
-"It's like this, it's that kind of talk. Between a man and a woman..."
+The two of them went down to the shore. At the tidal flats in front of the Fisheries College the water had drawn out. Behind, the green ridge of the UN Cemetery showed. Each step crunched on clamshells. Jeongwon liked the feel of it and walked slowly on purpose. Then she felt something pop up under her foot. She looked down. It was a clam. A fat hard clam stuck its head out of the sand. One step farther and another popped up. A clam rose with every step. The ground underfoot was a field of clams.
 
-Her eldest sister whispered it into her ear, and Jeongwon's face burned hot. An eleven-year-old didn't know such a world. She wasn't shrewd like children nowadays, nor did she have the look of knowing the world early. Jeongwon recalled the farmhands' faces one by one, and strangely, she laughed. It seemed shameful and it seemed dirty, but there was the smell of people in it. So that's what living as a person is. And still people laugh. And that in that laughter the laborers were loosening the weariness of the day, Jeongwon would come to understand later on.
+"Buhui, there's a heap of clams here."
+
+"So there is."
+
+"If we took these home and cooked them for Halmae, wouldn't that be something? Fresh ones."
+
+Having said it, Jeongwon looked at Buhui's face. It was a remark that already gave her a little twinge inside. If Buhui had said no, Jeongwon would simply have backed down. But Buhui said, eyes shining:
+
+"Let's do it, together."
+
+So the two bent and picked clams. When they had gathered about ten, Jeongwon's skirt was heavy. They hurried home, and only once they were home did Buhui let slip that those flats were where the Fisheries College had planted clams for an experiment.
+
+"Miss, they say that's the school's. That they planted them on purpose for experimenting."
+
+"You dunce, you tell me that now?"
+
+"But you were the one who said to."
+
+"You're the one who said 'let's do it'!"
+
+They looked at each other and burst out laughing. The laughter was mixed with fear. It was theft. The first theft of Jeongwon's life. And she was the girl who, hearing the story of the teacher's bundle-cloth, had said the world was truly filthy, and now she had silently taken what belonged to another. Her heart pounded. Though no one was chasing her, she looked back over her shoulder.
+
+Grandmother took the clams in the kitchen, looked at them once, and said:
+
+"Didn't Buhui tell you? They've set that up for an experiment."
+
+"I didn't know, Halmae."
+
+"Aigu, if you'd known, you'd have put them back. What can we do now? Already dug up, so we eat them."
+
+With a wry smile Grandmother poured in water and began to boil the clams. Into the clear broth she put tofu and scallion and, at the end, stirred in an egg lightly. It tasted plain and unsalted. The clam meat melted softly in the mouth. Grandfather took one spoonful and gave a hearty laugh.
+
+"Aigu, you did well to dig these."
+
+Jeongwon looked up at Grandfather with her spoon in hand. He had not scolded his granddaughter for stealing; he had even praised her. In the house in Daegu this would have been unimaginable. Mother would have jabbed a finger at Jeongwon's forehead right there, and gone on for days about what would happen if word got out that a daughter of the Heos had laid hands on other people's things. But in this house even a theft, once it became soup, became a meal.
+
+"Better than the clams at Seomun Market in Daegu. The smell of the tidal flats is still alive in them."
+
+Those words counted for more than any comfort. Jeongwon drank down the soup in long gulps. The dread settled, and as the broth went down her throat her body warmed within.
 
 ### 7
 
-When autumn came, the youngest gomo came from Busan.
+Another thing Jeongwon never forgot about that house was the tussle with Buhui over the fish.
 
-The youngest gomo was a different kind of person in the Heo family. She was tall and fair, and a story was passed around the family like a legend that she had entered the Miss Korea contest early on and been awarded a "Mi." No one knew exactly what rank that was. Perhaps it remained a legend precisely because no one tried to check. She was deeply cultured, soft in speech, and a scent hung about her fingertips. Jeongwon had liked that face from the moment she first saw it. It was a face she wanted to resemble, but in fact people said Jeongwon resembled the gomo. They said she resembled all the gomos a little each.
+Buhui always set the best piece on Jeongwon's plate and ate the leftover scraps, the tail and the bones, herself. She was a girl with tact. A girl who knew what it meant to wait on the mistress's granddaughter, and Jeongwon knew too that it was poverty that had taught her. But Jeongwon could not just stand by and watch.
 
-That year after Chuseok, Jeongwon went to Busan and stayed five days. It wasn't Mother who sent her. Father had only let the remark slip, and Mother couldn't block it. There was no ground to object when it was said that her younger sister-in-law and her husband had just begun setting up their first household.
+"Hey, you eat too."
 
-The youngest gomo's house stood on a hill on the Yeongdo side of Busan. Open the window and a strip of sea hung there, and gulls flew low above it. Gomo's husband was short, with round eyes and an easy laugh. When the sound of him coming into the house was heard, Gomo stopped whatever she was doing and ran to the door.
+"No. I mustn't eat things like this."
 
-"Is my *oi* home?"
+"Who says you mustn't?"
 
-Jeongwon didn't know whether it was a name or a nickname. She knew only that the *jeong* carried in those words was astonishingly large. It was the first house she had seen where a husband and wife made such sounds. Mother and Father's conversation was short and tidy, and even who spoke first was a kind of fight.
+"I mustn't."
 
-In the evenings Gomo toasted laver in the kitchen. She set a grill over the charcoal briquette fire, rubbed a sheet of laver with a hand dabbed in sesame oil, laid it on the grill, and soon a green sheen rose. Sprinkled with salt and turned over, it filled the room with a nutty smell. There was no performance in the hand that folded the toasted laver evenly and set it on Gomo's husband's rice bowl. Jeongwon stood at the kitchen door and watched that hand for a long time.
+"I'm telling you to eat, why won't you? You brat."
 
-"Won-ah, eat some too. Why're you just sitting there?"
+With her chopsticks Jeongwon pulled off the thickest meat of the fish and laid it on Buhui's rice. Buhui, aghast, put it back on Jeongwon's rice. Jeongwon put it on Buhui's again. After the passing back and forth went on two or three times, Grandmother, unable to bear it, could not hold back her laughter.
 
-"Yes, Gomo."
+"All right, eat each other's. By the time you finish giving way the fish'll be cold."
 
-"Aigo, eat plenty now. I've stacked up lots here."
+"Halmae, Buhui says she won't eat."
 
-Gomo heaped laver on a plate and pushed it toward Jeongwon. Jeongwon picked up only two or three sheets and laid them on her rice. The idea that you mustn't eat much when you're at someone else's house had settled into her body without any grown-up ever telling her. Gomo didn't miss it. She watched in silence for a while, then smiled and pushed the plate right up under Jeongwon's nose.
+"Buhui, it's the young miss's wish. Take it."
 
-"This ain't about being polite. We don't do that in this house. Eat till you burst. I'll roast you more."
+Buhui, reluctantly, put the piece in her mouth. Her eyes went round. She could not hide the joy spreading in her mouth. Watching, Jeongwon thought to herself: She knows taste too. She knows taste because she's clever. Cooking is brains. Show her once and the next day she does it exactly the same, a girl like that; what might she have become if only she'd been sent to school?
 
-Only then did Jeongwon take a fistful of laver and eat it wrapped around her rice. Sesame oil and salt and the smell of the sea spread through her mouth all at once. The laver Mother roasted in the Daegu house was also oiled and salted, and not one step in the order was wrong. But it didn't taste like this. Jeongwon didn't know why, though she thought she almost did. Mother's laver was laver roasted to be placed on a table. Gomo's laver was laver roasted to go into someone's mouth.
+That thought darkened Jeongwon's heart for a while that day. In this world, with the very same head, one goes into the staff room in a velvet coat carrying a bundle-cloth, and another eats a fish tail in someone else's kitchen. Eleven-year-old Jeongwon thought it unjust. But even when, as her *imo* had taught her, she said aloud that an unjust thing was unjust, there was no one to hear it. So she did small things instead. Whenever she had a pretty hairpin or handkerchief from somewhere, she'd say "If you want it, take it," and hand it to Buhui. Each time Buhui would laugh till her eyes became half-moons and say:
 
-That night Jeongwon lay a long time in her quilt without sleeping. From across the room she could hear Gomo and her husband talking low. She couldn't make out what they said, but now and then a low laugh burst out between them and leaked through the crack of the door. Jeongwon closed her eyes with that laughter for a pillow. A husband and wife can be like that, she thought for the first time. And she fell asleep trying to gauge how far that lay from what a husband and wife were in her own house.
+"Miss, even if you only come and go now and then, it's like heaven."
+
+Jeongwon could never forget those words. Heaven, she said. As if heaven and hell were separate places; as if wherever in this world there was such a spot, that was heaven. Even at seventy-five, Jeongwon would remember this house and say so.
 
 ### 8
 
-From some day on, whenever Mother mentioned Gomo, she lowered her voice by a note.
+At night Jeongwon slept in the middle.
 
-"You stayed too long at your Busan gomo's. I don't know what you learned there."
+Grandfather and Grandmother spread the bedding in the center of the room and laid Jeongwon between them. From either side came the breathing of the two old people, taking turns. At first, awkward, Jeongwon lay stretched out straight, but before long she turned on her side and buried her face toward Grandmother. Even when she was that age, even through middle school and high school, Jeongwon slept in this spot. Sleeping like that, no one was ashamed.
 
-"Learned? What's to learn, Mother? I just ate roasted laver."
+On the night she arrived, the two of them massaged her arms and legs. Grandmother took the arms and Grandfather the legs. The train had been long, so her whole body must be stiff. The touch of the two old people was not what a grown-up does for a child. It was the greeting that someone heaped with years gives to the one who came first to meet them.
 
-"Don't talk back."
+"Stop it, please. Halmae's arms will hurt. Halbae, stop too."
 
-That one remark settled down over the room. That day Jeongwon couldn't stay long by Mother's side. And for a while afterward, there were days when thinking of Gomo crumpled her heart for no reason. Only later would Jeongwon learn where that feeling came from. The voice in which Mother spoke ill of Gomo, an eleven-year-old had swallowed as if it were her own. For that reason she kept her distance from Gomo for a time, and only when she was quite old did she come to know how much she regretted it.
+"Hush. You had a hard time getting here."
 
-Then came the incident about Brother. It was on the day of some ancestral rite. The relatives were sitting together at the big table talking about the children, and one old man pointed at Jeongwon and laughed.
+That touch hurt Jeongwon strangely in the chest. These two were old. Their strength had ebbed, their finger joints were thick. That such hands were kneading a little granddaughter's legs she could not bear. Jeongwon sat up.
 
-"That child's bright, I'll give her that, but a lass ain't worth the grime under a boy's heel. However bright she may be."
+"Halmae, Halbae, let me rub yours."
 
-People laughed. Laughter rose from where Brother sat as well. Mother heard that remark, and she saw Jeongwon's face go white and stiff. But Mother didn't rebut it. She lowered her head once and moved a plate of *jeon* a little on the ritual table.
+"No, you lie down."
 
-That day Jeongwon went out to the kitchen. Cheongdo-daek came and sat beside her without a word and stirred the ashes with a poker. What Cheongdo-daek said a long while later was something Jeongwon would not forget at twelve, or at forty, or at seventy-five.
+"No. I'll do it."
 
-"Little miss, the one who said it's the dirty one. Not the one who heard."
+The three of them reached out, each insisting on rubbing the others, until the room grew rowdy, and at last Grandfather burst into a great laugh. Grandmother laughed along at the sound, and Jeongwon laughed too. The oil lamp flickered, and on the wall the shadows of the three tangled and danced. Those hands that night, each trying to rub the others, Jeongwon remembered for ever after. Later, whenever in the strange land of America she saw a child curse its mother, she would think of the hands of that night. That love is the contention of each to give the other something: Jeongwon learned this in that room.
 
-Jeongwon nodded. But in her chest something was hardening. That which would come to be called *han* grew hard as earth in Jeongwon's body from that day on, and stayed hard for a long time.
+After the lamp was put out, she heard the waves. *Chulssok, chulssok, chulkeodeok.* The deeper the night, the louder the sea. Jeongwon closed her eyes and listened to the sound and thought: Isn't there some little night boat on the far side? Isn't someone rowing toward here over those waves? How good it would be to ride a night boat anywhere at all. But where she wanted to go, she did not know. There was nowhere she wanted to go, away from this spot. Only that the words "night boat" were lovely. They seemed to come from far off and seemed also to go far away, and the words made her heart ache faintly.
+
+Later, nineteen years on and then as many again, in some year of the eighties, when she came back to this shore, a popular song of the same name was playing there. Jeongwon stood a long while listening to a song that only shared the name. But that song was not the song of a boy, and it was not the sound of the waves that night. The night boat of that night was not in the song.
+
+Beside her, Grandmother's chest rose and fell evenly. Jeongwon tried breathing in time with it. At first it didn't match. The next time it matched a little. And then at some moment the two had become one.
 
 ### 9
 
-That winter the first snow came at night.
+When she took the train back to Daegu a fortnight later, Jeongwon sat by the window and looked out toward the ticket gate for a long time. Grandfather, again, had stretched his neck to the sky and was waving. Even after the train began to move, that hand did not come down. Jeongwon pressed her forehead to the glass and watched until the hand became a dot.
 
-It was a heavy, soft snow. Jeongwon didn't hear anything. Snow comes without sound, so when she opened her eyes in the morning, the first thing that told her anything was that the light in the room was different from usual. The paper on the window was unusually white. She kicked off her quilt, got up, and opened the door.
+In her lap were the corn, sweet potatoes, and the crock of perilla-leaf *kimchi* that Grandmother had packed. She had bought a string of apples too. This time she picked the very best one for her own. But when she actually took a bite, no sweetness came. What remained in her mouth was the aftertaste of the *jaecheopguk*, not yet gone, and the warmth of two hands that had kneaded her legs, and Grandfather's sad profile looking out the window of the taxi.
 
-The yard was gone. The snow piled overnight was more than two inches deep, and the whole yard was covered with one sheet of white cloth. Snow sat on the well bucket, on the wall, on the persimmon branches. The jars on the *jangdokdae* all wore white caps, and those more than twenty caps in a row by height looked just like little servant boys lined up. In the flower bed, in every spot where Father's morning glories and balsams and portulacas and four-o'clocks had grown in spring and summer, the snow lay in soft mounds. There were no flowers, but the places where flowers had been seemed to breathe faintly beneath the snow.
+The train passed Samnangjin. The salted-fish sellers got on, and their briny reek filled the car. In that smell Jeongwon closed her eyes. When the train rounded that one mountain, it would be Daegu. In Daegu was the house with the big gate, the yard without a single step out of place, her brother who read his report card twice and she who read hers once. And in that house's kitchen was Cheongdo-daek. A person whose name no one knew, whose name Jeongwon had never asked. Jeongwon suddenly thought that this vacation she must be sure to ask Cheongdo-daek her name.
 
-The house was still quiet. Only the sound of Eonni moving softly in the kitchen. Jeongwon was seeing the first snow alone, and seeing it alone felt strangely precious. She put on her coat and went out to the *daecheong*.
-
-"Jeongwon, it's slippery. Careful."
-
-Mother's voice came across from the inner room. Mother spoke without opening the door. In that voice there was not worry but restraint. Still, Jeongwon could grope out, even in it, something she might call worry, just a very little. On days when her heart was soft, Jeongwon tried to find *jeong* in Mother's words that way.
-
-Beside the stone step there was a dry wooden floor, but Jeongwon didn't sit there. Instead she sat on the wet stone step. She scooped the snow with both hands and pushed it to one side to make a place. The cold seeped into her coat, but she didn't care.
-
-Then Mari came running. Mari was a dog who had lived eight years in this house. She had yellowish fur and black ear tips, and at the sight of the snow she shot into the middle of the yard as if possessed. Round the house, once, twice, three times, sometimes four. Paw prints were dotted over the snow, and snow dust rose between them. Mari came back to Jeongwon panting and sat at her feet. Tongue out, she looked up at Jeongwon. And her warm breath reached over Jeongwon's ankle.
-
-It was truly quiet.
-
-The snow ate sound. The neighbor's barking dog, the handcart loaded with coal briquettes passing in the alley, the faint din that had drifted from the faraway market all went under the white cloth. It was as if the whole world had held its breath at once.
+The train was slowly entering the dark. Somewhere, it seemed, a nameless night boat, this time, was rowing along beside the train.
