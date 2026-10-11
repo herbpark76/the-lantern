@@ -363,7 +363,7 @@ async function replanMemoir(db: SupabaseClient, subject: Subject, slug: string):
 }
 
 // Korean chapter first, then the English translation as a separate background job.
-async function writeMemoirChapter(db: SupabaseClient, subject: Subject, doc: { id: string; story_slug: string; position: number }): Promise<void> {
+async function writeMemoirChapter(db: SupabaseClient, subject: Subject, doc: { id: string; story_slug: string; position: number }, guidance = ""): Promise<void> {
   const chapters = await bookChapters(db, doc.story_slug);
   const before = chapters.filter((c) => c.position < doc.position);
   const [bible, plan, material] = await Promise.all([
@@ -375,7 +375,8 @@ async function writeMemoirChapter(db: SupabaseClient, subject: Subject, doc: { i
     material,
     before.length ? `The novel so far (Korean):\n\n${chaptersForPrompt(before, "ko", 120_000)}` : "No chapters yet: this is the opening chapter.",
     `YOUR BRIEF FOR THIS CHAPTER:\n${brief.text}`,
-  ].join("\n\n=====\n\n");
+    guidance ? `THE AUTHOR'S GUIDANCE FOR THIS CHAPTER (written in English; it overrides the brief where they differ):\n${guidance}` : "",
+  ].filter(Boolean).join("\n\n=====\n\n");
   const out = await callClaude(memoirChapterSystem(subject, doc.position, brief.targetWords), [{ role: "user", content: input }],
     Math.min(32000, Math.round(brief.targetWords * 6 * 1.1) + 3000));
   let md = out.text.trim();
@@ -470,6 +471,7 @@ async function reviseFromNotes(db: SupabaseClient, slug: string, chapterId: stri
     if (memoir) {
       const input = [
         `Story bible (English):\n${bible || "(none yet)"}`,
+        await memoirMaterial(db, subject),
         `This chapter's brief from the book plan:\n${brief.text}`,
         `The current chapter (Korean):\n\n${docBody(target, "ko")}`,
         notesBlock,
@@ -537,7 +539,7 @@ async function replan(db: SupabaseClient, slug: string): Promise<Response> {
 
 // "Create next chapter" (or "Try again"): write chapter chapterId from the bible and the chapters
 // before it. interview-admin creates the placeholder row (generating = true) and calls this.
-async function writeChapter(db: SupabaseClient, chapterId: string): Promise<Response> {
+async function writeChapter(db: SupabaseClient, chapterId: string, guidance = ""): Promise<Response> {
   const { data: docRow } = await db.from("book_docs").select("id, story_slug, position").eq("id", chapterId).maybeSingle();
   const doc = docRow as { id: string; story_slug: string; position: number } | null;
   if (!doc) return jsonError(404, "Chapter not found");
@@ -549,7 +551,7 @@ async function writeChapter(db: SupabaseClient, chapterId: string): Promise<Resp
   const lang = subject.language;
   if (subject.mode === "memoir") {
     try {
-      await writeMemoirChapter(db, subject, doc);
+      await writeMemoirChapter(db, subject, doc, guidance);
       startBackground("translate_chapter", { chapter_id: chapterId }); // stays "generating" until English is in
       return json({ ok: true, chapter: chapterId, translating: true });
     } catch (e) {
@@ -567,7 +569,8 @@ async function writeChapter(db: SupabaseClient, chapterId: string): Promise<Resp
       `Story bible (including the structure, chapter plan and the author's standing notes):\n${bible || "(none yet)"}`,
       before.length ? `The book so far:\n\n${chaptersForPrompt(before, lang, 160_000)}` : "No chapters yet: this is the opening chapter.",
       `YOUR BRIEF FOR THIS CHAPTER:\n${brief.text}`,
-    ].join("\n\n=====\n\n");
+      guidance ? `THE AUTHOR'S GUIDANCE FOR THIS CHAPTER (it overrides the brief where they differ):\n${guidance}` : "",
+    ].filter(Boolean).join("\n\n=====\n\n");
     const chapter = await callClaude(chapterSystem(subject, doc.position, brief.targetWords), [{ role: "user", content: input }], tokensFor(brief.targetWords));
     const md = chapterHeading(chapter.text, doc.position);
     await saveChapter(db, subject, chapterId, doc.position, md, "Before rewrite");
@@ -686,7 +689,7 @@ Deno.serve(async (req: Request) => {
       }
       return action === "replan"
         ? await replan(db, String(story_slug ?? ""))
-        : await writeChapter(db, String(chapter_id ?? ""));
+        : await writeChapter(db, String(chapter_id ?? ""), String(notesParam ?? ""));
     }
     if (!session_id) return jsonError(400, "session_id required");
 

@@ -206,8 +206,10 @@ export const interviewApi = {
     invoke<{ ok: boolean; status: string }>("interview-admin", { action: "publish_book", ...p }),
   unpublishBook: (story_slug: string) =>
     invoke<{ ok: boolean; status: string }>("interview-admin", { action: "unpublish_book", story_slug }),
-  writeChapter: (story_slug: string, chapter_id?: string) =>
-    invoke<{ chapter_id: string }>("interview-admin", { action: "write_chapter", story_slug, ...(chapter_id ? { chapter_id } : {}) }),
+  writeChapter: (story_slug: string, chapter_id?: string, notes?: string) =>
+    invoke<{ chapter_id: string }>("interview-admin", {
+      action: "write_chapter", story_slug, ...(chapter_id ? { chapter_id } : {}), ...(notes ? { notes } : {}),
+    }),
   reviseNotes: (story_slug: string, chapter_id: string | null, notes: string) =>
     invoke<{ ok: boolean }>("interview-admin", { action: "revise_notes", story_slug, chapter_id, notes }),
   transcribe: (audio: Blob, language = "en") => {

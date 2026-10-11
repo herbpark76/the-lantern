@@ -129,6 +129,7 @@ Deno.serve(async (req: Request) => {
       const { data: docs } = await db.from("book_docs").select("id, position, generating").eq("story_slug", slug).eq("kind", "sample");
       const rows = (docs as Array<{ id: string; position: number; generating: boolean }>) ?? [];
       if (rows.some((r) => r.generating)) return jsonError(409, "A chapter is already being written. Give it a few minutes.");
+      // Rewriting an existing chapter from scratch keeps the current text as a version (saveChapter / snapshot).
 
       let chapterId = body.chapter_id ? String(body.chapter_id) : "";
       if (chapterId) {
@@ -150,7 +151,7 @@ Deno.serve(async (req: Request) => {
       const p = fetch(`${SUPABASE_URL}/functions/v1/interview-finish`, {
         method: "POST",
         headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "write_chapter", chapter_id: chapterId }),
+        body: JSON.stringify({ action: "write_chapter", chapter_id: chapterId, notes: String(body.notes ?? "") }),
       }).catch((e) => console.error("[interview-admin] write_chapter trigger failed", e));
       if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(p);
       return json({ chapter_id: chapterId });

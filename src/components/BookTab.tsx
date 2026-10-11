@@ -416,6 +416,7 @@ function NotesPanel({ slug, target, targetTitle, memoir, voiceLink, onStarted }:
   slug: string; target: BookDoc | null; targetTitle: string; memoir: boolean; voiceLink: string | null; onStarted: () => void;
 }) {
   const [notes, setNotes] = useState("");
+  const [fresh, setFresh] = useState(false);
   const [busy, setBusy] = useState(false);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
@@ -453,7 +454,8 @@ function NotesPanel({ slug, target, targetTitle, memoir, voiceLink, onStarted }:
   const submit = async () => {
     setBusy(true); setError(null);
     try {
-      await interviewApi.reviseNotes(slug, target?.id ?? null, notes.trim());
+      if (target && fresh) await interviewApi.writeChapter(slug, target.id, notes.trim());
+      else await interviewApi.reviseNotes(slug, target?.id ?? null, notes.trim());
       onStarted();
     } catch (e) { setError((e as Error).message); }
     setBusy(false);
@@ -471,14 +473,24 @@ function NotesPanel({ slug, target, targetTitle, memoir, voiceLink, onStarted }:
       </div>
       <textarea className="input-field !py-2 text-sm" rows={6} value={notes} onChange={(e) => setNotes(e.target.value)}
         placeholder={target ? "e.g. Slow down the scene at the market. Her aunt should be funnier and louder. Cut the part about the radio. End the chapter on the bread, not the report card." : "e.g. The brother should be more sympathetic later on…"} />
+      {target && (
+        <label className="flex items-start gap-2 text-sm text-ink-700 dark:text-ink-200">
+          <input type="checkbox" className="mt-1" checked={fresh} onChange={(e) => setFresh(e.target.checked)} />
+          <span>
+            <strong>Start over</strong> instead of editing this draft: write the chapter fresh from its brief in the plan
+            {memoir ? ", her interviews" : ""} and the chapters before it, following your notes (optional). The current draft is kept as a version.
+          </span>
+        </label>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <button onClick={toggleDictation} disabled={transcribing || busy}
           className={`btn-secondary !py-2 !px-3 text-sm inline-flex items-center gap-1.5 ${recording ? "!bg-[#c95a5a] !text-white" : ""}`}>
           {transcribing ? <Loader2 size={14} className="animate-spin" /> : <Mic size={14} />}
           {recording ? "Stop dictating" : transcribing ? "Transcribing…" : "Dictate"}
         </button>
-        <button onClick={submit} disabled={busy || recording || transcribing || !notes.trim()} className="btn-primary !py-2 !px-3 text-sm">
-          {busy ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />} {target ? "Revise the chapter" : "Update the bible"}
+        <button onClick={submit} disabled={busy || recording || transcribing || (!fresh && !notes.trim())} className="btn-primary !py-2 !px-3 text-sm">
+          {busy ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+          {target ? (fresh ? "Rewrite from scratch" : "Revise the chapter") : "Update the bible"}
         </button>
         {voiceLink && (
           <a href={voiceLink} target="_blank" rel="noreferrer" className="text-sm text-accent-600 underline ml-auto">
