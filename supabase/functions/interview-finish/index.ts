@@ -161,8 +161,11 @@ function composeBible(bible: string, outline: string, open: string, previous = "
 }
 
 /** Refuse to save a bible from a reply that ran out of room: it would be missing its later sections. */
-function assertComplete(out: { stop_reason?: string }, what = "The bible update"): void {
-  if (out.stop_reason === "max_tokens") throw new Error(`${what} was too long and got cut off, so nothing was changed. Try again, or give shorter notes.`);
+function assertComplete(out: { stop_reason?: string; text?: string; output_tokens?: number }, what = "The bible update", needTag = ""): void {
+  if (out.stop_reason !== "max_tokens") return;
+  // Ran out of room, but the section we actually need was finished: keep it.
+  if (needTag && (out.text ?? "").includes(`</${needTag}>`)) return;
+  throw new Error(`${what} was too long and got cut off (${out.output_tokens ?? "?"} tokens), so nothing was changed. Try again, or give shorter notes.`);
 }
 
 function personFolder(subject: Subject): string {
@@ -338,9 +341,13 @@ async function finishGhostwriter(
   ].join("\n\n=====\n\n");
 
   const notes = await callClaude(GW_NOTES_SYSTEM, [{ role: "user", content: input }], 16000);
-  assertComplete(notes);
   const parsed = parseSections(notes.text, ["bible", "outline", "open_questions"]);
-  const bibleMd = composeBible(parsed.bible ?? "", parsed.outline ?? "", parsed.open_questions ?? "");
+  if (notes.stop_reason === "max_tokens") {
+    // Cut off: never save a half-written section; composeBible keeps the previous one instead.
+    if (!notes.text.includes("</bible>")) delete parsed.bible;
+    if (!notes.text.includes("</outline>")) delete parsed.outline;
+  }
+  const bibleMd = composeBible(parsed.bible ?? "", parsed.outline ?? "", parsed.open_questions ?? "", bible);
   await saveBible(db, subject, bibleMd, `Before session ${session.session_no}`);
   await queuePlan(db, subject.story_slug);
 
@@ -439,7 +446,7 @@ The author's notes as clear, actionable - bullets, grouped under "## For this ch
 The complete updated story bible: working title (and alternates), logline, genre and tone, comparable books/films, setting, protagonist (want, need, flaw, voice), key characters and the opposing force, central conflict and stakes, themes, the author's tastes and influences, and a short "## Author's standing notes" list of preferences that apply to all chapters. Keep any other sections the bible already has (for example style rules or a continuity ledger).
 </bible>`;
 
-const OUTLINE_SYSTEM = `You are a story developer. You receive the story bible (with its current structure and chapter plan), possibly the chapters written so far, and possibly new notes from the author. Produce the updated structure and chapter plan only. Keep everything the author has already decided; where new notes change the structure, the notes win.
+const OUTLINE_SYSTEM = `You are a story developer. You receive the story bible (with its current structure and chapter plan), possibly the chapters written so far, and possibly new notes from the author. Produce the updated structure and chapter plan only. Keep everything the author has already decided; where new notes change the structure, the notes win. Be compact: short bullets, and the whole answer under about 2,500 words. Don't repeat the bible.
 
 Answer with exactly these two sections, each wrapped in its tag. Markdown sections use ## subheadings, paragraphs and - bullets only; no tables.
 
@@ -459,10 +466,10 @@ async function reviseBibleAndPlan(bible: string, chapterBlock: string, notesBloc
   const input = [`Current story bible:\n${bible || "(none yet)"}`, chapterBlock, notesBlock].filter(Boolean).join("\n\n=====\n\n");
   const [b, o] = await Promise.all([
     callClaude(REVISE_BIBLE_SYSTEM, [{ role: "user", content: input }], 16000),
-    callClaude(OUTLINE_SYSTEM, [{ role: "user", content: input }], 12000),
+    callClaude(OUTLINE_SYSTEM, [{ role: "user", content: input }], 16000),
   ]);
-  assertComplete(b);
-  assertComplete(o, "The chapter plan update");
+  assertComplete(b, "The bible update", "bible");
+  assertComplete(o, "The chapter plan update", "outline");
   const pb = parseSections(b.text, ["revision_notes", "bible"]);
   const po = parseSections(o.text, ["outline", "open_questions"]);
   return { md: composeBible(pb.bible ?? "", po.outline ?? "", po.open_questions ?? "", bible), revisionNotes: pb.revision_notes ?? "" };
@@ -644,8 +651,8 @@ async function replan(db: SupabaseClient, slug: string): Promise<Response> {
       `The book so far:\n${chaptersForPrompt(chapters, lang, 120_000) || "(no chapters yet)"}`,
       "There is no new interview this time. Rebuild the structure and complete chapter plan from the material above, keeping everything the author has decided.",
     ].join("\n\n=====\n\n");
-    const notes = await callClaude(OUTLINE_SYSTEM, [{ role: "user", content: input }], 12000);
-    assertComplete(notes, "The chapter plan rebuild");
+    const notes = await callClaude(OUTLINE_SYSTEM, [{ role: "user", content: input }], 16000);
+    assertComplete(notes, "The chapter plan rebuild", "outline");
     const parsed = parseSections(notes.text, ["outline", "open_questions"]);
     await saveBible(db, subject, composeBible("", parsed.outline ?? "", parsed.open_questions ?? "", bible), "Before rebuilding the plan");
     await queuePlan(db, slug);
