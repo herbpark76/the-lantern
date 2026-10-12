@@ -407,6 +407,7 @@ export interface ClaudeResult {
 }
 
 let resolvedModel: string | null = null;
+let thinkingOffSupported = true;
 
 async function pickFallbackModel(): Promise<string | null> {
   const resp = await fetch("https://api.anthropic.com/v1/models?limit=100", {
@@ -435,10 +436,21 @@ export async function callClaude(system: string, messages: ClaudeMessage[], maxT
         max_tokens: maxTokens,
         system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
         messages,
+        // Hidden reasoning counts against max_tokens and can use up the whole budget before
+        // any text is written, so turn it off for these calls.
+        ...(thinkingOffSupported ? { thinking: { type: "disabled" } } : {}),
       }),
     });
 
   let resp = await send(model);
+  if (resp.status === 400 && thinkingOffSupported) {
+    const body = await resp.clone().text();
+    if (/thinking/i.test(body)) {
+      console.warn("[interview] model rejected thinking: disabled; retrying without it");
+      thinkingOffSupported = false;
+      resp = await send(model);
+    }
+  }
   if (resp.status === 404 && !resolvedModel) {
     // Model id not found — discover a current one and retry once.
     const fallback = await pickFallbackModel();
@@ -463,6 +475,8 @@ export async function callClaude(system: string, messages: ClaudeMessage[], maxT
     usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number };
   };
   let text = data.content.filter((c) => c.type === "text").map((c) => c.text ?? "").join("").trim();
+  const hidden = data.content.filter((c) => c.type !== "text").length;
+  if (hidden) console.warn(`[interview] reply included ${hidden} non-text block(s): ${data.content.map((c) => c.type).join(", ")}`);
   if (data.stop_reason === "max_tokens") {
     // Ran out of room mid-sentence: keep only whole sentences so nothing is spoken half-finished.
     console.warn(`[interview] reply hit max_tokens (${maxTokens}); trimming to the last full sentence`);

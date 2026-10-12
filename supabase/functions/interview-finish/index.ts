@@ -165,7 +165,11 @@ function assertComplete(out: { stop_reason?: string; text?: string; output_token
   if (out.stop_reason !== "max_tokens") return;
   // Ran out of room, but the section we actually need was finished: keep it.
   if (needTag && (out.text ?? "").includes(`</${needTag}>`)) return;
-  throw new Error(`${what} was too long and got cut off (${out.output_tokens ?? "?"} tokens), so nothing was changed. Try again, or give shorter notes.`);
+  const text = out.text ?? "";
+  const chapters = (text.match(/^###\s*Chapter\s+\d+/gim) ?? []).length;
+  const tail = text.slice(-90).replace(/\s+/g, " ");
+  console.error(`[interview-finish] ${what} cut off at ${out.output_tokens} tokens; ${chapters} chapter headings; tail: ${text.slice(-2000)}`);
+  throw new Error(`${what} was too long and got cut off (${out.output_tokens ?? "?"} tokens, ${chapters} chapters written, ends "…${tail}"), so nothing was changed.`);
 }
 
 function personFolder(subject: Subject): string {
