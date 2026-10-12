@@ -5,8 +5,9 @@
 //   { action: "set_password", subject_id, password }
 //   { action: "session_audio", session_id }   → { urls: { [turn_id]: signedUrl } }
 //   { action: "delete_session", session_id }  → removes a (test) session + its audio
+//   { action: "import_from_repo", chapter_id } → replaces a chapter's text with books/<slug>/chapter-NN.<lang>.md
 
-import { ELEVENLABS_API_KEY, SERVICE_ROLE_KEY, SUPABASE_URL, speechToText, textToSpeech, type Subject } from "../_shared/interview.ts";
+import { ELEVENLABS_API_KEY, GITHUB_REPO, GITHUB_TOKEN, SERVICE_ROLE_KEY, SUPABASE_URL, speechToText, textToSpeech, type Subject } from "../_shared/interview.ts";
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
 import { admin, BUCKET, corsHeaders, getCaller, isStaffUser, json, jsonError, type Turn } from "../_shared/interview.ts";
@@ -122,6 +123,57 @@ Deno.serve(async (req: Request) => {
       if (on.length) await db.from("book_docs").update({ published: true }).in("id", on);
       if (off.length) await db.from("book_docs").update({ published: false }).in("id", off);
       return json({ ok: true, status: "published", published: on });
+    }
+
+    // Replace a chapter's text with the edited files in the repo (books/<slug>/chapter-NN.<lang>.md,
+    // or the older sample-N.<lang>.md), keeping the current text as an earlier version.
+    //   { action: "import_from_repo", chapter_id } → { ok, imported: ["ko", "en"], paths }
+    if (body.action === "import_from_repo") {
+      const chapterId = String(body.chapter_id ?? "");
+      if (!chapterId) return jsonError(400, "chapter_id is required");
+      if (!GITHUB_TOKEN || !GITHUB_REPO) return jsonError(500, "GITHUB_TOKEN / GITHUB_REPO not configured");
+      const { data } = await db.from("book_docs").select("*").eq("id", chapterId).maybeSingle();
+      const doc = data as { id: string; story_slug: string; kind: string; position: number; generating: boolean; gen_started_at: string | null;
+        title_en: string; title_ko: string; body_en: string; body_ko: string } | null;
+      if (!doc || doc.kind !== "sample") return jsonError(404, "Chapter not found");
+      if (running(doc)) return jsonError(409, "This chapter is being rewritten right now. Try again when it finishes.");
+
+      const n = doc.position;
+      const nn = String(n).padStart(2, "0");
+      const fetchFile = async (path: string): Promise<string | null> => {
+        const r = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${path}?ref=main`, {
+          headers: { Authorization: `Bearer ${GITHUB_TOKEN}`, Accept: "application/vnd.github.raw+json" },
+        });
+        if (r.status === 404) return null;
+        if (!r.ok) throw new Error(`GitHub ${r.status} reading ${path}: ${(await r.text()).slice(0, 200)}`);
+        return (await r.text()).replace(/\r\n/g, "\n").trim();
+      };
+      const update: Record<string, string> = {};
+      const imported: string[] = [];
+      const paths: string[] = [];
+      for (const lang of ["ko", "en"] as const) {
+        let path = `books/${doc.story_slug}/chapter-${nn}.${lang}.md`;
+        let text = await fetchFile(path);
+        if (text === null) { path = `books/${doc.story_slug}/sample-${n}.${lang}.md`; text = await fetchFile(path); }
+        if (!text) continue;
+        const first = text.split("\n")[0];
+        if (/^#\s+/.test(first)) update[`title_${lang}`] = first.replace(/^#\s+/, "").trim();
+        update[`body_${lang}`] = text;
+        imported.push(lang);
+        paths.push(path);
+      }
+      if (!imported.length) return jsonError(404, `No chapter-${nn}.ko.md / .en.md found in books/${doc.story_slug}/ on main`);
+      const unchanged = imported.every((l) => update[`body_${l}`] === ((l === "ko" ? doc.body_ko : doc.body_en) ?? "").replace(/\r\n/g, "\n").trim());
+      if (unchanged) return json({ ok: true, imported: [], paths, unchanged: true });
+
+      const { error: vErr } = await db.from("book_doc_versions").insert({
+        doc_id: doc.id, title_en: doc.title_en, title_ko: doc.title_ko, body_en: doc.body_en, body_ko: doc.body_ko,
+        note: "Before importing the repo text",
+      });
+      if (vErr) throw new Error(vErr.message);
+      const { error: uErr } = await db.from("book_docs").update({ ...update, gen_error: null, updated_at: new Date().toISOString() }).eq("id", doc.id);
+      if (uErr) throw new Error(uErr.message);
+      return json({ ok: true, imported, paths });
     }
 
     // Write the next chapter of a ghostwriter book (or rewrite chapter_id from the bible) in the

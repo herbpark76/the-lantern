@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  BookOpen, ChevronLeft, ChevronRight, FileText, Globe, Headphones, History, Loader2, MessageSquare, Mic, Pause, Play,
+  BookOpen, ChevronLeft, ChevronRight, Download, FileText, Globe, Headphones, History, Loader2, MessageSquare, Mic, Pause, Pencil, Play,
   RefreshCw, SkipBack, SkipForward, Sparkles,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -93,6 +93,10 @@ export function BookTab() {
   const [msg, setMsg] = useState<string | null>(null);
   const [writing, setWriting] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
+  // Hand edits: the exact text typed here (or imported from the repo) replaces the chapter, old text kept as a version.
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
   const [lang, setLang] = useState<Lang>(() => {
     try { return (localStorage.getItem("book-lang") as Lang) || "ko"; } catch { return "ko"; }
   });
@@ -149,6 +153,7 @@ export function BookTab() {
     supabase.from("book_doc_versions").select("*").eq("doc_id", doc.id).order("created_at", { ascending: false })
       .then(({ data }) => setVersions((data as DocVersion[]) ?? []));
   }, [doc?.id, doc?.updated_at]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setEditing(false); }, [doc?.id, lang]);
 
   if (loading) return <div className="py-12 flex justify-center"><Loader2 className="animate-spin text-ink-400" /></div>;
   if (!docs.length) {
@@ -181,6 +186,47 @@ export function BookTab() {
     if (e1 || e2) { setMsg((e1 ?? e2)!.message); return; }
     setMsg("Restored. The version you replaced is kept in the list.");
     await loadDocs();
+  };
+
+  const startEdit = () => {
+    if (!doc) return;
+    setDraft(shown === "en" ? doc.body_en ?? "" : doc.body_ko ?? "");
+    setShowNotes(false); setMsg(null); setEditing(true);
+  };
+
+  const saveEdit = async () => {
+    if (!doc) return;
+    const text = draft.replace(/\r\n/g, "\n").trim();
+    if (!text) { setMsg("The chapter can't be empty."); return; }
+    if (text === ((shown === "en" ? doc.body_en : doc.body_ko) ?? "").trim()) { setEditing(false); return; }
+    setSaving(true); setMsg(null);
+    const { error: e1 } = await supabase.from("book_doc_versions").insert({
+      doc_id: doc.id, title_en: doc.title_en, title_ko: doc.title_ko, body_en: doc.body_en, body_ko: doc.body_ko,
+      note: "Before a hand edit",
+    });
+    const first = text.split("\n")[0];
+    const update: Record<string, string> = { [`body_${shown}`]: text, updated_at: new Date().toISOString() };
+    if (/^#\s+/.test(first)) update[`title_${shown}`] = first.replace(/^#\s+/, "").trim();
+    const { error: e2 } = e1 ? { error: null } : await supabase.from("book_docs").update(update).eq("id", doc.id);
+    setSaving(false);
+    if (e1 || e2) { setMsg((e1 ?? e2)!.message); return; }
+    setEditing(false);
+    setMsg(`Saved. The previous text is kept in the version list.${langs.length > 1 ? ` Only the ${shown === "en" ? "English" : "Korean"} text changed.` : ""} Narration for changed paragraphs needs re-recording.`);
+    await loadDocs();
+  };
+
+  const importFromRepo = async () => {
+    if (!doc) return;
+    setSaving(true); setMsg(null);
+    try {
+      const r = await interviewApi.importFromRepo(doc.id);
+      if (r.unchanged) setMsg(`The repo text (${r.paths.join(", ")}) already matches this chapter.`);
+      else {
+        setMsg(`Imported ${r.imported.map((l) => (l === "en" ? "English" : "Korean")).join(" and ")} from ${r.paths.join(", ")}. The previous text is kept in the version list. Narration for changed paragraphs needs re-recording.`);
+        await loadDocs();
+      }
+    } catch (e) { setMsg((e as Error).message); }
+    setSaving(false);
   };
 
   const buildPlan = async () => {
@@ -318,6 +364,18 @@ export function BookTab() {
                   <Sparkles size={15} /> {plan ? "Rebuild chapter plan" : "Build chapter plan"}
                 </button>
               )}
+              {kind === "sample" && !editing && (
+                <>
+                  <button onClick={startEdit} disabled={saving} className="btn-secondary !py-2 !px-3 text-sm inline-flex items-center gap-1.5"
+                    title="Edit the exact text of this chapter by hand">
+                    <Pencil size={15} /> Edit text
+                  </button>
+                  <button onClick={importFromRepo} disabled={saving} className="btn-secondary !py-2 !px-3 text-sm inline-flex items-center gap-1.5"
+                    title={`Replace this chapter with books/${doc.story_slug}/chapter-${String(doc.position).padStart(2, "0")}.ko.md and .en.md from GitHub (main)`}>
+                    {saving ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} Import from repo
+                  </button>
+                </>
+              )}
               {kind === "sample" && (
                 <button onClick={() => createChapter()} disabled={writing}
                   className="btn-primary !py-2 !px-3 text-sm inline-flex items-center gap-1.5">
@@ -407,10 +465,29 @@ export function BookTab() {
       ) : doc ? (
         <>
           {doc.gen_error && <p className="text-sm text-error-600 font-sans">{doc.kind === "summary" ? "Last update:" : "The last rewrite failed:"} {doc.gen_error}</p>}
-          {!version && <AudioBar key={`${doc.id}:${shown}:${doc.updated_at}:${doc.model_id}`} doc={doc} lang={shown} onChanged={loadDocs} />}
-          <article lang={shown} className="card px-6 sm:px-10 py-8">
-            <Markdown text={body} lang={shown} />
-          </article>
+          {editing && !version ? (
+            <div className="card p-4 space-y-3 font-sans">
+              <p className="text-xs text-ink-500">
+                Editing the {shown === "en" ? "English" : "Korean"} text in markdown. The first line ("# Chapter N: Title") sets the title; "### 1" lines are section breaks.
+              </p>
+              <textarea lang={shown} className="input-field font-serif text-base leading-relaxed min-h-[60vh]" value={draft}
+                onChange={(e) => setDraft(e.target.value)} spellCheck={shown === "en"} />
+              <div className="flex flex-wrap items-center gap-2">
+                <button onClick={saveEdit} disabled={saving} className="btn-primary !py-2 !px-4 text-sm">
+                  {saving && <Loader2 size={14} className="animate-spin" />} Save
+                </button>
+                <button onClick={() => setEditing(false)} disabled={saving} className="btn-ghost !py-2 text-sm">Cancel</button>
+                <span className="text-xs text-ink-500 ml-auto">{wordCount(draft).toLocaleString()} words</span>
+              </div>
+            </div>
+          ) : (
+            <>
+              {!version && <AudioBar key={`${doc.id}:${shown}:${doc.updated_at}:${doc.model_id}`} doc={doc} lang={shown} onChanged={loadDocs} />}
+              <article lang={shown} className="card px-6 sm:px-10 py-8">
+                <Markdown text={body} lang={shown} />
+              </article>
+            </>
+          )}
         </>
       ) : (
         <p className="text-sm text-ink-500 font-sans">Nothing here yet.</p>

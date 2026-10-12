@@ -219,6 +219,8 @@ export const interviewApi = {
     form.append("audio", audio, audio.type.includes("mp4") ? "notes.m4a" : "notes.webm");
     return invoke<{ text: string }>("interview-admin", form);
   },
+  importFromRepo: (chapter_id: string) =>
+    invoke<{ ok: boolean; imported: string[]; paths: string[]; unchanged?: boolean }>("interview-admin", { action: "import_from_repo", chapter_id }),
   replan: (story_slug: string) =>
     invoke<{ ok: boolean; bible_id: string }>("interview-admin", { action: "replan", story_slug }),
   listVoices: () => invoke<{ voices: ElevenVoice[] }>("interview-admin", { action: "list_voices" }),
