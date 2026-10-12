@@ -130,8 +130,39 @@ function nn(n: number): string {
   return String(n).padStart(2, "0");
 }
 
-function composeBible(bible: string, outline: string, open: string): string {
-  return `# Story Bible\n\n${bible}\n\n# Structure and chapter plan\n\n${outline}\n\n## Still to decide\n\n${open}`;
+const STRUCTURE_HEADING = /^#\s*Structure and chapter plan\s*$/im;
+
+/** The bible part of a composed bible document: everything before its structure section, without "# Story Bible" headings. */
+function bibleBodyOf(md: string): string {
+  const m = md.match(STRUCTURE_HEADING);
+  const body = m?.index !== undefined ? md.slice(0, m.index) : md;
+  return body.replace(/^#\s*Story Bible\s*$/gim, "").trim();
+}
+
+/** The "## Still to decide" list at the end of a bible document. */
+function openQuestionsOf(md: string): string {
+  const lists = md.split("## Still to decide").slice(1).map((s) => s.split(STRUCTURE_HEADING)[0].trim());
+  return [...lists].reverse().find(Boolean) ?? "";
+}
+
+const hasChapters = (outline: string) => /^###\s*Chapter\s+\d+/im.test(outline);
+
+/**
+ * Assemble the bible document. `previous` is the bible being replaced: any part the model left
+ * out (or that came back empty) is kept from it, so a short or cut-off reply can never wipe the
+ * chapter plan or nest the old document inside the new one.
+ */
+function composeBible(bible: string, outline: string, open: string, previous = ""): string {
+  const body = bibleBodyOf(bible) || bibleBodyOf(previous);
+  let plan = outline.replace(STRUCTURE_HEADING, "").replace(/^##\s*Still to decide[\s\S]*$/im, "").trim();
+  if (!hasChapters(plan) && previous) plan = outlineOf(previous).replace(STRUCTURE_HEADING, "").trim() || plan;
+  const questions = open.trim() || openQuestionsOf(previous);
+  return `# Story Bible\n\n${body}\n\n# Structure and chapter plan\n\n${plan}\n\n## Still to decide\n\n${questions}`;
+}
+
+/** Refuse to save a bible from a reply that ran out of room: it would be missing its later sections. */
+function assertComplete(out: { stop_reason?: string }, what = "The bible update"): void {
+  if (out.stop_reason === "max_tokens") throw new Error(`${what} was too long and got cut off, so nothing was changed. Try again, or give shorter notes.`);
 }
 
 function personFolder(subject: Subject): string {
@@ -187,10 +218,20 @@ Include every chapter listed. Keep each beat to one short sentence. Use English.
 
 /** The "# Structure and chapter plan" part of a bible document. */
 function outlineOf(bibleMd: string): string {
-  const start = bibleMd.indexOf("# Structure and chapter plan");
-  if (start < 0) return bibleMd;
-  const end = bibleMd.indexOf("## Still to decide", start);
-  return bibleMd.slice(start, end > start ? end : undefined);
+  // A bible that was saved badly in the past can hold more than one structure section; use the
+  // last one that actually lists chapters.
+  const sections: string[] = [];
+  let at = bibleMd.indexOf("# Structure and chapter plan");
+  if (at < 0) return bibleMd;
+  while (at >= 0) {
+    const next = bibleMd.indexOf("# Structure and chapter plan", at + 1);
+    let chunk = bibleMd.slice(at, next > at ? next : undefined);
+    const end = chunk.indexOf("## Still to decide");
+    if (end > 0) chunk = chunk.slice(0, end);
+    sections.push(chunk);
+    at = next;
+  }
+  return [...sections].reverse().find(hasChapters) ?? sections[sections.length - 1];
 }
 
 /** Mark the bible as busy and convert its outline to the JSON plan in a separate background call. */
@@ -206,6 +247,7 @@ async function makePlan(db: SupabaseClient, slug: string): Promise<void> {
     const row = data as { body_en: string; body_ko: string } | null;
     const outline = outlineOf(row?.body_en || row?.body_ko || "");
     if (!outline.trim()) throw new Error("The bible has no structure section yet");
+    if (!hasChapters(outline)) throw new Error("The bible's chapter plan section is empty. Try Rebuild chapter plan.");
     const out = await callClaude(PLAN_JSON_SYSTEM, [{ role: "user", content: outline }], 12000);
     const plan = parsePlan(out.text);
     await db.from("book_docs").update({
@@ -296,6 +338,7 @@ async function finishGhostwriter(
   ].join("\n\n=====\n\n");
 
   const notes = await callClaude(GW_NOTES_SYSTEM, [{ role: "user", content: input }], 16000);
+  assertComplete(notes);
   const parsed = parseSections(notes.text, ["bible", "outline", "open_questions"]);
   const bibleMd = composeBible(parsed.bible ?? "", parsed.outline ?? "", parsed.open_questions ?? "");
   await saveBible(db, subject, bibleMd, `Before session ${session.session_no}`);
@@ -393,8 +436,9 @@ async function replanMemoir(db: SupabaseClient, subject: Subject, slug: string):
     material,
   ].join("\n\n=====\n\n");
   const notes = await callClaude(MEMOIR_PLAN_SYSTEM, [{ role: "user", content: input }], 16000);
+  assertComplete(notes);
   const parsed = parseSections(notes.text, ["bible", "outline", "open_questions"]);
-  await saveBible(db, subject, composeBible(parsed.bible ?? bible, parsed.outline ?? "", parsed.open_questions ?? ""), "Before rebuilding the plan", null, "en");
+  await saveBible(db, subject, composeBible(parsed.bible ?? "", parsed.outline ?? "", parsed.open_questions ?? "", bible), "Before rebuilding the plan", null, "en");
 }
 
 // Korean chapter first, then the English translation as a separate background job.
@@ -485,8 +529,9 @@ async function reviseFromNotes(db: SupabaseClient, slug: string, chapterId: stri
         `${notesBlock}\n\nFold these notes into the bible and plan; where they change something, the notes win.`,
       ].join("\n\n=====\n\n");
       const out = await callClaude(MEMOIR_PLAN_SYSTEM, [{ role: "user", content: input }], 16000);
+      assertComplete(out);
       const p = parseSections(out.text, ["bible", "outline", "open_questions"]);
-      await saveBible(db, subject, composeBible(p.bible ?? bible, p.outline ?? "", p.open_questions ?? ""), "Before notes from Studio", null, "en");
+      await saveBible(db, subject, composeBible(p.bible ?? "", p.outline ?? "", p.open_questions ?? "", bible), "Before notes from Studio", null, "en");
     } else {
       const input = [
         `Current story bible:\n${bible || "(none yet)"}`,
@@ -494,8 +539,9 @@ async function reviseFromNotes(db: SupabaseClient, slug: string, chapterId: stri
         `Notes (typed in Studio rather than spoken):\n\n${notesText}`,
       ].join("\n\n=====\n\n");
       const out = await callClaude(REVISE_NOTES_SYSTEM, [{ role: "user", content: input }], 16000);
+      assertComplete(out);
       const p = parseSections(out.text, ["revision_notes", "bible", "outline", "open_questions"]);
-      await saveBible(db, subject, composeBible(p.bible ?? bible, p.outline ?? "", p.open_questions ?? ""), "Before notes from Studio");
+      await saveBible(db, subject, composeBible(p.bible ?? "", p.outline ?? "", p.open_questions ?? "", bible), "Before notes from Studio");
     }
   })();
 
@@ -560,8 +606,9 @@ async function replan(db: SupabaseClient, slug: string): Promise<Response> {
       "There is no new interview this time. Rebuild the complete bible, structure and chapter plan from the material above, keeping everything the author has decided.",
     ].join("\n\n=====\n\n");
     const notes = await callClaude(GW_NOTES_SYSTEM, [{ role: "user", content: input }], 16000);
-    const parsed = parseSections(notes.text, ["bible", "outline", "open_questions"]);
-    await saveBible(db, subject, composeBible(parsed.bible ?? bible, parsed.outline ?? "", parsed.open_questions ?? ""), "Before rebuilding the plan");
+    assertComplete(notes);
+  const parsed = parseSections(notes.text, ["bible", "outline", "open_questions"]);
+    await saveBible(db, subject, composeBible(parsed.bible ?? "", parsed.outline ?? "", parsed.open_questions ?? "", bible), "Before rebuilding the plan");
     await queuePlan(db, slug);
     return json({ ok: true });
   } catch (e) {
@@ -650,8 +697,9 @@ async function finishRevision(
     callClaude(REVISE_NOTES_SYSTEM, [{ role: "user", content: notesInput }], 16000),
     target ? callClaude(rewriteSystem(subject), [{ role: "user", content: rewriteInput }], tokensFor(brief?.targetWords ?? 3500)) : Promise.resolve(null),
   ]);
-  const parsed = parseSections(notes.text, ["revision_notes", "bible", "outline", "open_questions"]);
-  const bibleMd = composeBible(parsed.bible ?? bible, parsed.outline ?? "", parsed.open_questions ?? "");
+  // A cut-off reply would be missing its later sections: keep the current bible instead.
+  const parsed: Record<string, string> = notes.stop_reason === "max_tokens" ? {} : parseSections(notes.text, ["revision_notes", "bible", "outline", "open_questions"]);
+  const bibleMd = composeBible(parsed.bible ?? "", parsed.outline ?? "", parsed.open_questions ?? "", bible);
 
   await saveBible(db, subject, bibleMd, `Before notes session ${session.session_no}`);
   await queuePlan(db, subject.story_slug);

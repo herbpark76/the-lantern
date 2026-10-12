@@ -402,6 +402,8 @@ export interface ClaudeResult {
   text: string;
   input_tokens: number;
   output_tokens: number;
+  /** "max_tokens" when the reply was cut off before it finished. */
+  stop_reason?: string;
 }
 
 let resolvedModel: string | null = null;
@@ -472,6 +474,7 @@ export async function callClaude(system: string, messages: ClaudeMessage[], maxT
     text,
     input_tokens: (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0),
     output_tokens: u.output_tokens ?? 0,
+    stop_reason: data.stop_reason,
   };
 }
 
