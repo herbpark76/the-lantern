@@ -327,7 +327,7 @@ async function finishGhostwriter(
   const earlier = ((earlierRows as Array<{ session_no: number; kind: string; summary_en: string | null; followups: string | null }>) ?? [])
     .map((s) => `Session ${s.session_no}${s.kind === "revise" ? " (author's notes)" : ""}:\n${s.summary_en ?? ""}`)
     .join("\n\n---\n\n") || "(none — this is the first session)";
-  const bible = await currentBible(db, subject.story_slug, lang);
+  const bible = await loadBible(db, subject.story_slug, lang);
   const book = chaptersForPrompt(chapters, lang, 120_000);
 
   const input = [
@@ -426,9 +426,51 @@ async function memoirMaterial(db: SupabaseClient, subject: Subject, transcriptBu
   return `# Interview notes\n\n${notes || "(no finished sessions)"}${transcripts.length ? `\n\n# Transcripts\n\n${transcripts.join("\n\n")}` : ""}`;
 }
 
+// The bible text and the chapter plan are now produced by two separate, smaller calls, so
+// neither reply runs long enough to get cut off.
+const REVISE_BIBLE_SYSTEM = `You are a story editor. You receive the current story bible, possibly the text of one chapter, and the author's notes (typed, or a speech-to-text transcript; small errors are normal). Fold the author's notes into the bible faithfully. Keep everything in the bible that the notes don't change; where the notes change something, the notes win. Never invent preferences the author didn't express; you may mark tasteful fills "(suggested)". Do NOT include the structure, acts or chapter plan: those are updated separately.
+
+Answer with exactly these two sections, each wrapped in its tag. Markdown sections use ## subheadings, paragraphs and - bullets only; no tables.
+
+<revision_notes>
+The author's notes as clear, actionable - bullets, grouped under "## For this chapter" (only if a chapter was discussed) and "## For the story overall".
+</revision_notes>
+<bible>
+The complete updated story bible: working title (and alternates), logline, genre and tone, comparable books/films, setting, protagonist (want, need, flaw, voice), key characters and the opposing force, central conflict and stakes, themes, the author's tastes and influences, and a short "## Author's standing notes" list of preferences that apply to all chapters. Keep any other sections the bible already has (for example style rules or a continuity ledger).
+</bible>`;
+
+const OUTLINE_SYSTEM = `You are a story developer. You receive the story bible (with its current structure and chapter plan), possibly the chapters written so far, and possibly new notes from the author. Produce the updated structure and chapter plan only. Keep everything the author has already decided; where new notes change the structure, the notes win.
+
+Answer with exactly these two sections, each wrapped in its tag. Markdown sections use ## subheadings, paragraphs and - bullets only; no tables.
+
+${PLAN_SPEC}
+<open_questions>
+4–8 questions still to settle, as - bullets.
+</open_questions>`;
+
+/** A bible document cleaned of any duplicated sections from earlier bad saves. */
+async function loadBible(db: SupabaseClient, slug: string, lang: string): Promise<string> {
+  const md = await loadBible(db, slug, lang);
+  return md.trim() ? composeBible(bibleBodyOf(md), outlineOf(md), openQuestionsOf(md)) : "";
+}
+
+/** Fold notes into the bible text and the chapter plan with two parallel calls; returns the new bible document. */
+async function reviseBibleAndPlan(bible: string, chapterBlock: string, notesBlock: string): Promise<{ md: string; revisionNotes: string }> {
+  const input = [`Current story bible:\n${bible || "(none yet)"}`, chapterBlock, notesBlock].filter(Boolean).join("\n\n=====\n\n");
+  const [b, o] = await Promise.all([
+    callClaude(REVISE_BIBLE_SYSTEM, [{ role: "user", content: input }], 16000),
+    callClaude(OUTLINE_SYSTEM, [{ role: "user", content: input }], 12000),
+  ]);
+  assertComplete(b);
+  assertComplete(o, "The chapter plan update");
+  const pb = parseSections(b.text, ["revision_notes", "bible"]);
+  const po = parseSections(o.text, ["outline", "open_questions"]);
+  return { md: composeBible(pb.bible ?? "", po.outline ?? "", po.open_questions ?? "", bible), revisionNotes: pb.revision_notes ?? "" };
+}
+
 async function replanMemoir(db: SupabaseClient, subject: Subject, slug: string): Promise<void> {
   const [bible, chapters, material] = await Promise.all([
-    currentBible(db, slug, "en"), bookChapters(db, slug), memoirMaterial(db, subject, 60_000),
+    loadBible(db, slug, "en"), bookChapters(db, slug), memoirMaterial(db, subject, 60_000),
   ]);
   const input = [
     `Current bible (may be just a session summary):\n${bible || "(none yet)"}`,
@@ -514,7 +556,7 @@ async function reviseFromNotes(db: SupabaseClient, slug: string, chapterId: stri
   const chapters = await bookChapters(db, slug);
   const target = chapterId ? chapters.find((c) => c.id === chapterId) : undefined;
   const bibleLang = memoir ? "en" : subject.language;
-  const bible = await currentBible(db, slug, bibleLang);
+  const bible = await loadBible(db, slug, bibleLang);
   const plan = await currentPlan(db, slug);
   const notesBlock = `The author's notes${target ? ` on ${docTitle(target, "en")}` : " on the story"}:\n\n${notesText}`;
 
@@ -533,15 +575,12 @@ async function reviseFromNotes(db: SupabaseClient, slug: string, chapterId: stri
       const p = parseSections(out.text, ["bible", "outline", "open_questions"]);
       await saveBible(db, subject, composeBible(p.bible ?? "", p.outline ?? "", p.open_questions ?? "", bible), "Before notes from Studio", null, "en");
     } else {
-      const input = [
-        `Current story bible:\n${bible || "(none yet)"}`,
+      const { md } = await reviseBibleAndPlan(
+        bible,
         target ? `Chapter discussed: ${docTitle(target, subject.language)}\n\n${docBody(target, subject.language)}` : "No specific chapter: general notes on the story.",
         `Notes (typed in Studio rather than spoken):\n\n${notesText}`,
-      ].join("\n\n=====\n\n");
-      const out = await callClaude(REVISE_NOTES_SYSTEM, [{ role: "user", content: input }], 16000);
-      assertComplete(out);
-      const p = parseSections(out.text, ["revision_notes", "bible", "outline", "open_questions"]);
-      await saveBible(db, subject, composeBible(p.bible ?? "", p.outline ?? "", p.open_questions ?? "", bible), "Before notes from Studio");
+      );
+      await saveBible(db, subject, md, "Before notes from Studio");
     }
   })();
 
@@ -599,16 +638,16 @@ async function replan(db: SupabaseClient, slug: string): Promise<Response> {
       return json({ ok: true });
     }
     const lang = subject.language;
-    const [bible, chapters] = await Promise.all([currentBible(db, slug, lang), bookChapters(db, slug)]);
+    const [bible, chapters] = await Promise.all([loadBible(db, slug, lang), bookChapters(db, slug)]);
     const input = [
       `Current story bible:\n${bible || "(none yet)"}`,
       `The book so far:\n${chaptersForPrompt(chapters, lang, 120_000) || "(no chapters yet)"}`,
-      "There is no new interview this time. Rebuild the complete bible, structure and chapter plan from the material above, keeping everything the author has decided.",
+      "There is no new interview this time. Rebuild the structure and complete chapter plan from the material above, keeping everything the author has decided.",
     ].join("\n\n=====\n\n");
-    const notes = await callClaude(GW_NOTES_SYSTEM, [{ role: "user", content: input }], 16000);
-    assertComplete(notes);
-  const parsed = parseSections(notes.text, ["bible", "outline", "open_questions"]);
-    await saveBible(db, subject, composeBible(parsed.bible ?? "", parsed.outline ?? "", parsed.open_questions ?? "", bible), "Before rebuilding the plan");
+    const notes = await callClaude(OUTLINE_SYSTEM, [{ role: "user", content: input }], 12000);
+    assertComplete(notes, "The chapter plan rebuild");
+    const parsed = parseSections(notes.text, ["outline", "open_questions"]);
+    await saveBible(db, subject, composeBible("", parsed.outline ?? "", parsed.open_questions ?? "", bible), "Before rebuilding the plan");
     await queuePlan(db, slug);
     return json({ ok: true });
   } catch (e) {
@@ -644,7 +683,7 @@ async function writeChapter(db: SupabaseClient, chapterId: string, guidance = ""
   try {
     const chapters = await bookChapters(db, doc.story_slug);
     const before = chapters.filter((c) => c.position < doc.position);
-    const bible = await currentBible(db, doc.story_slug, lang);
+    const bible = await loadBible(db, doc.story_slug, lang);
     const brief = chapterBrief(await currentPlan(db, doc.story_slug), doc.position);
     const input = [
       `Story bible (including the structure, chapter plan and the author's standing notes):\n${bible || "(none yet)"}`,
@@ -677,14 +716,9 @@ async function finishRevision(
   const transcript = transcriptOf(subject, turns, "Editor");
   const chapters = await bookChapters(db, subject.story_slug);
   const target = session.target_doc ? chapters.find((c) => c.id === session.target_doc) : undefined;
-  const bible = await currentBible(db, subject.story_slug, lang);
+  const bible = await loadBible(db, subject.story_slug, lang);
   const chapterText = target ? docBody(target, lang) : "";
 
-  const notesInput = [
-    `Current story bible:\n${bible || "(none yet)"}`,
-    target ? `Chapter discussed: ${docTitle(target, lang)}\n\n${chapterText}` : "No specific chapter: general notes on the story.",
-    `Notes session transcript:\n\n${transcript}`,
-  ].join("\n\n=====\n\n");
   const brief = target ? chapterBrief(await currentPlan(db, subject.story_slug), target.position) : null;
   const rewriteInput = [
     `Story bible:\n${bible || "(none yet)"}`,
@@ -693,13 +727,17 @@ async function finishRevision(
     `Notes session transcript:\n\n${transcript}`,
   ].join("\n\n=====\n\n");
 
-  const [notes, rewrite] = await Promise.all([
-    callClaude(REVISE_NOTES_SYSTEM, [{ role: "user", content: notesInput }], 16000),
+  const [revised, rewrite] = await Promise.all([
+    // A cut-off reply would be missing its later sections: keep the current bible instead.
+    reviseBibleAndPlan(
+      bible,
+      target ? `Chapter discussed: ${docTitle(target, lang)}\n\n${chapterText}` : "No specific chapter: general notes on the story.",
+      `Notes session transcript:\n\n${transcript}`,
+    ).catch((e) => { console.error("[interview-finish] bible update skipped:", (e as Error).message); return { md: bible, revisionNotes: "" }; }),
     target ? callClaude(rewriteSystem(subject), [{ role: "user", content: rewriteInput }], tokensFor(brief?.targetWords ?? 3500)) : Promise.resolve(null),
   ]);
-  // A cut-off reply would be missing its later sections: keep the current bible instead.
-  const parsed: Record<string, string> = notes.stop_reason === "max_tokens" ? {} : parseSections(notes.text, ["revision_notes", "bible", "outline", "open_questions"]);
-  const bibleMd = composeBible(parsed.bible ?? "", parsed.outline ?? "", parsed.open_questions ?? "", bible);
+  const parsed: Record<string, string> = { revision_notes: revised.revisionNotes };
+  const bibleMd = revised.md;
 
   await saveBible(db, subject, bibleMd, `Before notes session ${session.session_no}`);
   await queuePlan(db, subject.story_slug);
@@ -717,8 +755,8 @@ async function finishRevision(
     transcript_ko: transcript,
     transcript_en: transcript,
     summary_en: parsed.revision_notes ?? "",
-    scene_notes: parsed.outline ?? "",
-    followups: parsed.open_questions ?? "",
+    scene_notes: outlineOf(bibleMd),
+    followups: openQuestionsOf(bibleMd),
     input_tokens,
     output_tokens,
     est_cost_usd: estimateCost(input_tokens, output_tokens),
