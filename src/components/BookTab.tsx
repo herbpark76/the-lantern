@@ -26,6 +26,7 @@ export interface BookDoc {
   model_id?: string;
   final_model_id?: string;
   generating?: boolean;
+  gen_started_at?: string | null;
   gen_error?: string | null;
   /** On the story bible: the plan of the whole book. */
   plan?: {
@@ -377,7 +378,15 @@ export function BookTab() {
         </p>
       )}
 
-      {doc?.generating ? (
+      {doc?.generating && (!doc.gen_started_at || Date.now() - new Date(doc.gen_started_at).getTime() > 15 * 60 * 1000) ? (
+        <div className="card px-6 py-8 text-center font-sans space-y-3">
+          <p className="text-ink-700 dark:text-ink-200">This seems to have stopped partway: it's been running much longer than it should.</p>
+          <p className="text-sm text-ink-500">Nothing was lost; the previous text is still in the Version list.</p>
+          <button onClick={() => (doc.kind === "summary" ? buildPlan() : createChapter(doc.id))} disabled={writing} className="btn-primary !py-2">
+            <RefreshCw size={14} /> Try again
+          </button>
+        </div>
+      ) : doc?.generating ? (
         <div className="card px-6 py-12 text-center font-sans space-y-2">
           <Loader2 size={24} className="animate-spin text-accent-500 mx-auto" />
           <p className="text-ink-700 dark:text-ink-200">

@@ -11,6 +11,12 @@ import { ELEVENLABS_API_KEY, SERVICE_ROLE_KEY, SUPABASE_URL, speechToText, textT
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
 import { admin, BUCKET, corsHeaders, getCaller, isStaffUser, json, jsonError, type Turn } from "../_shared/interview.ts";
 
+// A background job counts as running for 15 minutes; after that it is treated as dead and can be restarted.
+const STALE_MS = 15 * 60 * 1000;
+function running(r: { generating: boolean; gen_started_at: string | null }): boolean {
+  return !!r.generating && !!r.gen_started_at && Date.now() - new Date(r.gen_started_at).getTime() < STALE_MS;
+}
+
 const MATTHEW_VOICE = "kNjmAhXxYgxjF0oyxw4c"; // English narrator voice for ghostwriter projects
 
 Deno.serve(async (req: Request) => {
@@ -126,15 +132,15 @@ Deno.serve(async (req: Request) => {
       const subjects = (subjRows as Subject[]) ?? [];
       const subject = subjects.find((x) => x.mode === "ghostwriter") ?? subjects[0] ?? null;
       if (!subject) return jsonError(404, "This book has no interview yet");
-      const { data: docs } = await db.from("book_docs").select("id, position, generating").eq("story_slug", slug).eq("kind", "sample");
-      const rows = (docs as Array<{ id: string; position: number; generating: boolean }>) ?? [];
-      if (rows.some((r) => r.generating)) return jsonError(409, "A chapter is already being written. Give it a few minutes.");
+      const { data: docs } = await db.from("book_docs").select("id, position, generating, gen_started_at").eq("story_slug", slug).eq("kind", "sample");
+      const rows = (docs as Array<{ id: string; position: number; generating: boolean; gen_started_at: string | null }>) ?? [];
+      if (rows.some((r) => running(r))) return jsonError(409, "A chapter is already being written. Give it a few minutes.");
       // Rewriting an existing chapter from scratch keeps the current text as a version (saveChapter / snapshot).
 
       let chapterId = body.chapter_id ? String(body.chapter_id) : "";
       if (chapterId) {
         if (!rows.some((r) => r.id === chapterId)) return jsonError(404, "Chapter not found");
-        await db.from("book_docs").update({ generating: true, gen_error: null }).eq("id", chapterId);
+        await db.from("book_docs").update({ generating: true, gen_started_at: new Date().toISOString(), gen_error: null }).eq("id", chapterId);
       } else {
         const n = rows.reduce((m, r) => Math.max(m, r.position), 0) + 1;
         chapterId = `${slug}/sample-${String(n).padStart(2, "0")}`;
@@ -143,7 +149,7 @@ Deno.serve(async (req: Request) => {
           id: chapterId, story_slug: slug, kind: "sample", position: n,
           title_en: `Chapter ${n}`, ...(lang === "ko" ? { title_ko: `제${n}장` } : {}), [`voice_${lang}`]: subject.tts_voice_id,
           model_id: subject.tts_model_id, speed: Number(subject.tts_speed) || 1,
-          generating: true, gen_error: null,
+          generating: true, gen_started_at: new Date().toISOString(), gen_error: null,
         });
         if (error) throw new Error(error.message);
       }
@@ -164,10 +170,12 @@ Deno.serve(async (req: Request) => {
       const notes = String(body.notes ?? "").trim();
       if (!notes) return jsonError(400, "Add some notes first");
       const chapterId = body.chapter_id ? String(body.chapter_id) : null;
-      const { data: busy } = await db.from("book_docs").select("id").eq("story_slug", slug).eq("generating", true).limit(1);
-      if (busy?.length) return jsonError(409, "Something in this book is still being written. Give it a few minutes.");
-      if (chapterId) await db.from("book_docs").update({ generating: true, gen_error: null }).eq("id", chapterId);
-      else await db.from("book_docs").update({ generating: true, gen_error: null }).eq("id", `${slug}/bible`);
+      const { data: busy } = await db.from("book_docs").select("id, generating, gen_started_at").eq("story_slug", slug).eq("generating", true);
+      if (((busy as Array<{ generating: boolean; gen_started_at: string | null }>) ?? []).some(running)) {
+        return jsonError(409, "Something in this book is still being written. Give it a few minutes.");
+      }
+      if (chapterId) await db.from("book_docs").update({ generating: true, gen_started_at: new Date().toISOString(), gen_error: null }).eq("id", chapterId);
+      else await db.from("book_docs").update({ generating: true, gen_started_at: new Date().toISOString(), gen_error: null }).eq("id", `${slug}/bible`);
       const p = fetch(`${SUPABASE_URL}/functions/v1/interview-finish`, {
         method: "POST",
         headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, "Content-Type": "application/json" },
@@ -185,10 +193,10 @@ Deno.serve(async (req: Request) => {
       const subjects = (subjRows as Subject[]) ?? [];
       const subject = subjects.find((x) => x.mode === "ghostwriter") ?? subjects[0] ?? null;
       if (!subject) return jsonError(404, "This book has no interview yet");
-      const { data: existing } = await db.from("book_docs").select("id, generating").eq("id", bibleId).maybeSingle();
-      if ((existing as { generating?: boolean } | null)?.generating) return jsonError(409, "The plan is already being built.");
+      const { data: existing } = await db.from("book_docs").select("id, generating, gen_started_at").eq("id", bibleId).maybeSingle();
+      if (existing && running(existing as { generating: boolean; gen_started_at: string | null })) return jsonError(409, "The plan is already being built.");
       if (existing) {
-        await db.from("book_docs").update({ generating: true, gen_error: null }).eq("id", bibleId);
+        await db.from("book_docs").update({ generating: true, gen_started_at: new Date().toISOString(), gen_error: null }).eq("id", bibleId);
       } else {
         // First living bible: start from the newest session bible.
         const { data: latest } = await db.from("book_docs").select("body_en, body_ko").eq("story_slug", slug).eq("kind", "summary")
@@ -198,7 +206,7 @@ Deno.serve(async (req: Request) => {
         await db.from("book_docs").insert({
           id: bibleId, story_slug: slug, kind: "summary", position: 0,
           [`title_${lang}`]: "Story Bible", body_en: l?.body_en ?? "", body_ko: l?.body_ko ?? "",
-          [`voice_${lang}`]: subject.tts_voice_id, generating: true,
+          [`voice_${lang}`]: subject.tts_voice_id, generating: true, gen_started_at: new Date().toISOString(),
         });
       }
       const p = fetch(`${SUPABASE_URL}/functions/v1/interview-finish`, {

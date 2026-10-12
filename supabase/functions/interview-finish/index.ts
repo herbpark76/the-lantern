@@ -73,16 +73,12 @@ The structure of the whole book, in markdown:
 ## Format and length: the kind of book (novella, novel, short story…) and its target total length in words. Use what the author said; if they never said, plan a novella of about 30,000 words and mark it "(suggested)".
 ## Acts: Act I (setup, roughly the first quarter), Act II (confrontation, with the midpoint), Act III (climax and resolution), a short paragraph each.
 ## Major plot points: inciting incident, first plot point (end of Act I), midpoint, low point / second plot point (end of Act II), climax, resolution, each with the chapter it lands in.
-## Chapter plan: every chapter of the finished book, as "### Chapter N: <working title> (Act X, ~W words)" followed by - bullets for its beats and its job in the story. The chapter targets must add up to the book's target length, with lengths that suit each chapter's weight. Chapters already written keep their number and title and are marked "(written)"; plan the rest so the whole book still lands its acts and plot points.
-</outline>
-<plan_json>
-The same structure as strict JSON (no comments, no trailing commas), exactly this shape:
-{"format":"novella","target_words":30000,"acts":[{"act":1,"summary":"..."}],"plot_points":[{"name":"Inciting incident","chapter":1,"summary":"..."}],"chapters":[{"n":1,"title":"...","act":1,"target_words":2500,"purpose":"...","beats":["...","..."]}]}
-</plan_json>`;
+## Chapter plan: every chapter of the finished book, as "### Chapter N: <working title> (Act X, ~W words)" followed by 2–4 short - bullets for its beats and one "- Job: …" bullet for its job in the story. The chapter targets must add up to the book's target length, with lengths that suit each chapter's weight. Chapters already written keep their number and title and are marked "(written)"; plan the rest so the whole book still lands its acts and plot points.
+</outline>`;
 
 const GW_NOTES_SYSTEM = `You are a story developer. You receive the current story bible (if any), notes from earlier sessions (including sessions where the author gave notes on the draft), and the transcript of a voice interview in which the author described the story they want written (speech-to-text; small errors are normal). Produce the complete, updated version of each section, keeping everything still true and folding in what's new. Build on everything known so far; where something was left open, make a clear, tasteful suggestion and mark it "(suggested)". Never contradict what the author said.
 
-Answer with exactly these four sections, each wrapped in its tag. Markdown sections use ## subheadings, paragraphs and - bullets only; no tables.
+Answer with exactly these three sections, each wrapped in its tag. Markdown sections use ## subheadings, paragraphs and - bullets only; no tables.
 
 <bible>
 The story bible: working title (and 2–3 alternates), logline, genre and tone, comparable books/films, setting, the protagonist (want, need, flaw, voice), key supporting characters and the opposing force, central conflict and stakes, themes, the author's stated tastes and influences, and a short "## Author's standing notes" list of preferences that apply to every chapter.
@@ -110,7 +106,7 @@ Output only the chapter in markdown: first line "# Chapter ${n}: <title>", then 
 
 const REVISE_NOTES_SYSTEM = `You are a story editor. You receive the current story bible, possibly the text of one chapter, and the transcript of a voice session in which the author gave notes (speech-to-text; small errors are normal). Fold the author's notes into the bible faithfully. Keep everything in the bible that the notes don't change; where the notes change something, the notes win. Never invent preferences the author didn't express; you may mark tasteful fills "(suggested)".
 
-Answer with exactly these five sections, each wrapped in its tag. Markdown sections use ## subheadings, paragraphs and - bullets only; no tables.
+Answer with exactly these four sections, each wrapped in its tag. Markdown sections use ## subheadings, paragraphs and - bullets only; no tables.
 
 <revision_notes>
 The author's notes from this session as clear, actionable - bullets, grouped under "## For this chapter" (only if a chapter was discussed) and "## For the story overall".
@@ -189,17 +185,35 @@ const PLAN_JSON_SYSTEM = `Convert a book's structure (written in markdown) into 
 {"format":"novel","target_words":60000,"acts":[{"act":1,"summary":"..."}],"plot_points":[{"name":"Inciting incident","chapter":1,"summary":"..."}],"chapters":[{"n":1,"title":"...","act":1,"target_words":3000,"purpose":"...","beats":["...","..."]}]}
 Include every chapter listed. Keep each beat to one short sentence. Use English.`;
 
-/** The plan as JSON: from the model's <plan_json>, or, if that is missing or broken (e.g. cut off), from the outline. */
-async function ensurePlan(parsed: Record<string, string>): Promise<BookPlan | null> {
-  const direct = parsePlan(parsed.plan_json);
-  if (direct) return direct;
-  if (!parsed.outline?.trim()) return null;
+/** The "# Structure and chapter plan" part of a bible document. */
+function outlineOf(bibleMd: string): string {
+  const start = bibleMd.indexOf("# Structure and chapter plan");
+  if (start < 0) return bibleMd;
+  const end = bibleMd.indexOf("## Still to decide", start);
+  return bibleMd.slice(start, end > start ? end : undefined);
+}
+
+/** Mark the bible as busy and convert its outline to the JSON plan in a separate background call. */
+async function queuePlan(db: SupabaseClient, slug: string): Promise<void> {
+  await db.from("book_docs").update({ generating: true, gen_started_at: new Date().toISOString(), gen_error: null }).eq("id", `${slug}/bible`);
+  startBackground("make_plan", { story_slug: slug });
+}
+
+async function makePlan(db: SupabaseClient, slug: string): Promise<void> {
+  const id = `${slug}/bible`;
   try {
-    const out = await callClaude(PLAN_JSON_SYSTEM, [{ role: "user", content: parsed.outline }], 12000);
-    return parsePlan(out.text);
+    const { data } = await db.from("book_docs").select("body_en, body_ko").eq("id", id).maybeSingle();
+    const row = data as { body_en: string; body_ko: string } | null;
+    const outline = outlineOf(row?.body_en || row?.body_ko || "");
+    if (!outline.trim()) throw new Error("The bible has no structure section yet");
+    const out = await callClaude(PLAN_JSON_SYSTEM, [{ role: "user", content: outline }], 12000);
+    const plan = parsePlan(out.text);
+    await db.from("book_docs").update({
+      ...(plan ? { plan } : {}), generating: false,
+      gen_error: plan ? null : "The chapter plan couldn't be read; try Rebuild chapter plan.",
+    }).eq("id", id);
   } catch (e) {
-    console.error("[interview-finish] plan conversion failed", e);
-    return null;
+    await db.from("book_docs").update({ generating: false, gen_error: String((e as Error).message ?? e).slice(0, 300) }).eq("id", id);
   }
 }
 
@@ -281,10 +295,11 @@ async function finishGhostwriter(
     `This session (#${session.session_no}) transcript:\n\n${transcript}`,
   ].join("\n\n=====\n\n");
 
-  const notes = await callClaude(GW_NOTES_SYSTEM, [{ role: "user", content: input }], 24000);
-  const parsed = parseSections(notes.text, ["bible", "outline", "plan_json", "open_questions"]);
+  const notes = await callClaude(GW_NOTES_SYSTEM, [{ role: "user", content: input }], 16000);
+  const parsed = parseSections(notes.text, ["bible", "outline", "open_questions"]);
   const bibleMd = composeBible(parsed.bible ?? "", parsed.outline ?? "", parsed.open_questions ?? "");
-  await saveBible(db, subject, bibleMd, `Before session ${session.session_no}`, await ensurePlan(parsed));
+  await saveBible(db, subject, bibleMd, `Before session ${session.session_no}`);
+  await queuePlan(db, subject.story_slug);
 
   const input_tokens = session.input_tokens + notes.input_tokens;
   const output_tokens = session.output_tokens + notes.output_tokens;
@@ -321,7 +336,9 @@ async function finishGhostwriter(
 
 const MEMOIR_PLAN_SYSTEM = `You are the developmental editor of a family-saga novel drawn from interviews with the author's mother, in the spirit of Toji, Taebaek Sanmaek, Pachinko and Ode to My Father: fictionalized, but true at heart. You receive the notes from her interview sessions (summaries, scene notes, follow-ups, in English, with her own phrases quoted in Korean), the current bible if any, and the chapters written so far. Be faithful: never contradict what she said; where the story needs invention (scenes, dialogue, connective tissue), say so and mark it "(invented)".
 
-Answer in English with exactly these four sections, each wrapped in its tag. Markdown sections use ## subheadings, paragraphs and - bullets only; no tables.
+Be concise so the whole answer fits: the bible in about 2,000 words, the structure in about 2,500.
+
+Answer in English with exactly these three sections, each wrapped in its tag. Markdown sections use ## subheadings, paragraphs and - bullets only; no tables.
 
 <bible>
 The story bible: working title (Korean and English), logline, the novel's point of view and frame (present day and flashbacks), tone and style notes (the Toji/Taebaek Sanmaek register: period texture, Gyeongsang dialect in dialogue, food, seasons, objects), timeline by era with years and ages, the people (with relationships, what she said about them), places, recurring motifs and her own memorable phrasings, themes, what is known vs. invented, and a short "## Standing notes" list that applies to every chapter (e.g. sensitivities, things never to invent).
@@ -366,7 +383,7 @@ async function memoirMaterial(db: SupabaseClient, subject: Subject, transcriptBu
   return `# Interview notes\n\n${notes || "(no finished sessions)"}${transcripts.length ? `\n\n# Transcripts\n\n${transcripts.join("\n\n")}` : ""}`;
 }
 
-async function replanMemoir(db: SupabaseClient, subject: Subject, slug: string): Promise<BookPlan | null> {
+async function replanMemoir(db: SupabaseClient, subject: Subject, slug: string): Promise<void> {
   const [bible, chapters, material] = await Promise.all([
     currentBible(db, slug, "en"), bookChapters(db, slug), memoirMaterial(db, subject, 60_000),
   ]);
@@ -375,11 +392,9 @@ async function replanMemoir(db: SupabaseClient, subject: Subject, slug: string):
     `Chapters written so far (English):\n${chaptersForPrompt(chapters, "en", 80_000) || "(none yet)"}`,
     material,
   ].join("\n\n=====\n\n");
-  const notes = await callClaude(MEMOIR_PLAN_SYSTEM, [{ role: "user", content: input }], 24000);
-  const parsed = parseSections(notes.text, ["bible", "outline", "plan_json", "open_questions"]);
-  const plan = await ensurePlan(parsed);
-  await saveBible(db, subject, composeBible(parsed.bible ?? bible, parsed.outline ?? "", parsed.open_questions ?? ""), "Before rebuilding the plan", plan, "en");
-  return plan;
+  const notes = await callClaude(MEMOIR_PLAN_SYSTEM, [{ role: "user", content: input }], 16000);
+  const parsed = parseSections(notes.text, ["bible", "outline", "open_questions"]);
+  await saveBible(db, subject, composeBible(parsed.bible ?? bible, parsed.outline ?? "", parsed.open_questions ?? ""), "Before rebuilding the plan", null, "en");
 }
 
 // Korean chapter first, then the English translation as a separate background job.
@@ -469,18 +484,18 @@ async function reviseFromNotes(db: SupabaseClient, slug: string, chapterId: stri
         material,
         `${notesBlock}\n\nFold these notes into the bible and plan; where they change something, the notes win.`,
       ].join("\n\n=====\n\n");
-      const out = await callClaude(MEMOIR_PLAN_SYSTEM, [{ role: "user", content: input }], 24000);
-      const p = parseSections(out.text, ["bible", "outline", "plan_json", "open_questions"]);
-      await saveBible(db, subject, composeBible(p.bible ?? bible, p.outline ?? "", p.open_questions ?? ""), "Before notes from Studio", await ensurePlan(p), "en");
+      const out = await callClaude(MEMOIR_PLAN_SYSTEM, [{ role: "user", content: input }], 16000);
+      const p = parseSections(out.text, ["bible", "outline", "open_questions"]);
+      await saveBible(db, subject, composeBible(p.bible ?? bible, p.outline ?? "", p.open_questions ?? ""), "Before notes from Studio", null, "en");
     } else {
       const input = [
         `Current story bible:\n${bible || "(none yet)"}`,
         target ? `Chapter discussed: ${docTitle(target, subject.language)}\n\n${docBody(target, subject.language)}` : "No specific chapter: general notes on the story.",
         `Notes (typed in Studio rather than spoken):\n\n${notesText}`,
       ].join("\n\n=====\n\n");
-      const out = await callClaude(REVISE_NOTES_SYSTEM, [{ role: "user", content: input }], 24000);
-      const p = parseSections(out.text, ["revision_notes", "bible", "outline", "plan_json", "open_questions"]);
-      await saveBible(db, subject, composeBible(p.bible ?? bible, p.outline ?? "", p.open_questions ?? ""), "Before notes from Studio", await ensurePlan(p));
+      const out = await callClaude(REVISE_NOTES_SYSTEM, [{ role: "user", content: input }], 16000);
+      const p = parseSections(out.text, ["revision_notes", "bible", "outline", "open_questions"]);
+      await saveBible(db, subject, composeBible(p.bible ?? bible, p.outline ?? "", p.open_questions ?? ""), "Before notes from Studio");
     }
   })();
 
@@ -522,7 +537,7 @@ async function reviseFromNotes(db: SupabaseClient, slug: string, chapterId: stri
   } else if (target) {
     await db.from("book_docs").update({ generating: false, gen_error: null }).eq("id", target.id);
   }
-  await db.from("book_docs").update({ generating: false }).eq("id", `${slug}/bible`).eq("generating", true);
+  await queuePlan(db, slug); // refresh the JSON plan from the updated outline (clears the bible's "generating")
 }
 
 // "Build the chapter plan": restructure the existing bible (and what's written) into the full
@@ -533,9 +548,9 @@ async function replan(db: SupabaseClient, slug: string): Promise<Response> {
   if (!subject) return jsonError(404, "No interview for this book");
   try {
     if (subject.mode === "memoir") {
-      const plan = await replanMemoir(db, subject, slug);
-      await db.from("book_docs").update({ generating: false, gen_error: plan ? null : "The plan came back unreadable; the bible text was still updated." }).eq("id", bibleId);
-      return json({ ok: true, plan: !!plan });
+      await replanMemoir(db, subject, slug);
+      await queuePlan(db, slug); // the JSON plan is its own short background step
+      return json({ ok: true });
     }
     const lang = subject.language;
     const [bible, chapters] = await Promise.all([currentBible(db, slug, lang), bookChapters(db, slug)]);
@@ -544,12 +559,11 @@ async function replan(db: SupabaseClient, slug: string): Promise<Response> {
       `The book so far:\n${chaptersForPrompt(chapters, lang, 120_000) || "(no chapters yet)"}`,
       "There is no new interview this time. Rebuild the complete bible, structure and chapter plan from the material above, keeping everything the author has decided.",
     ].join("\n\n=====\n\n");
-    const notes = await callClaude(GW_NOTES_SYSTEM, [{ role: "user", content: input }], 24000);
-    const parsed = parseSections(notes.text, ["bible", "outline", "plan_json", "open_questions"]);
-    const plan = await ensurePlan(parsed);
-    await saveBible(db, subject, composeBible(parsed.bible ?? bible, parsed.outline ?? "", parsed.open_questions ?? ""), "Before rebuilding the plan", plan);
-    await db.from("book_docs").update({ generating: false, gen_error: plan ? null : "The plan came back unreadable; the bible text was still updated." }).eq("id", bibleId);
-    return json({ ok: true, plan: !!plan });
+    const notes = await callClaude(GW_NOTES_SYSTEM, [{ role: "user", content: input }], 16000);
+    const parsed = parseSections(notes.text, ["bible", "outline", "open_questions"]);
+    await saveBible(db, subject, composeBible(parsed.bible ?? bible, parsed.outline ?? "", parsed.open_questions ?? ""), "Before rebuilding the plan");
+    await queuePlan(db, slug);
+    return json({ ok: true });
   } catch (e) {
     const msg = String((e as Error).message ?? e).slice(0, 300);
     await db.from("book_docs").update({ generating: false, gen_error: msg }).eq("id", bibleId);
@@ -633,13 +647,14 @@ async function finishRevision(
   ].join("\n\n=====\n\n");
 
   const [notes, rewrite] = await Promise.all([
-    callClaude(REVISE_NOTES_SYSTEM, [{ role: "user", content: notesInput }], 24000),
+    callClaude(REVISE_NOTES_SYSTEM, [{ role: "user", content: notesInput }], 16000),
     target ? callClaude(rewriteSystem(subject), [{ role: "user", content: rewriteInput }], tokensFor(brief?.targetWords ?? 3500)) : Promise.resolve(null),
   ]);
-  const parsed = parseSections(notes.text, ["revision_notes", "bible", "outline", "plan_json", "open_questions"]);
+  const parsed = parseSections(notes.text, ["revision_notes", "bible", "outline", "open_questions"]);
   const bibleMd = composeBible(parsed.bible ?? bible, parsed.outline ?? "", parsed.open_questions ?? "");
 
-  await saveBible(db, subject, bibleMd, `Before notes session ${session.session_no}`, await ensurePlan(parsed));
+  await saveBible(db, subject, bibleMd, `Before notes session ${session.session_no}`);
+  await queuePlan(db, subject.story_slug);
   let chapterMd = "";
   if (target && rewrite?.text.trim()) {
     chapterMd = chapterHeading(rewrite.text, target.position);
@@ -686,7 +701,7 @@ Deno.serve(async (req: Request) => {
     const { session_id, skip_github, action, chapter_id, story_slug, notes: notesParam } = await req.json().catch(() => ({}));
 
     // Background jobs started by interview-admin (service role only).
-    if (action === "write_chapter" || action === "replan" || action === "translate_chapter" || action === "revise_notes") {
+    if (action === "write_chapter" || action === "replan" || action === "translate_chapter" || action === "revise_notes" || action === "make_plan") {
       const bearer = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
       if (bearer !== SERVICE_ROLE_KEY) return jsonError(403, "Forbidden");
       if (action === "revise_notes") {
@@ -700,6 +715,11 @@ Deno.serve(async (req: Request) => {
           await db.from("book_docs").update({ generating: false, gen_error: msg }).in("id", [cid ?? "", `${slug}/bible`]);
           return jsonError(500, msg);
         }
+      }
+      if (action === "make_plan") {
+        const job = makePlan(db, String(story_slug ?? ""));
+        if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(job); else await job;
+        return json({ accepted: true });
       }
       if (action === "translate_chapter") {
         // Answer right away and translate in the background, so the caller isn't held open.
@@ -829,7 +849,7 @@ ${transcriptKo}
     const bibleId = `${subject.story_slug}/bible`;
     const { data: bibleRow } = await db.from("book_docs").select("id, generating").eq("id", bibleId).maybeSingle();
     if (bibleRow && !(bibleRow as { generating?: boolean }).generating) {
-      await db.from("book_docs").update({ generating: true, gen_error: null }).eq("id", bibleId);
+      await db.from("book_docs").update({ generating: true, gen_started_at: new Date().toISOString(), gen_error: null }).eq("id", bibleId);
       startBackground("replan", { story_slug: subject.story_slug });
     }
     return json({ ok: true, github_path: update.github_path ?? null, github_error: update.github_error ?? null, bible_updating: !!bibleRow });
