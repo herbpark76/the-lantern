@@ -450,7 +450,7 @@ ${PLAN_SPEC}
 
 /** A bible document cleaned of any duplicated sections from earlier bad saves. */
 async function loadBible(db: SupabaseClient, slug: string, lang: string): Promise<string> {
-  const md = await loadBible(db, slug, lang);
+  const md = await currentBible(db, slug, lang);
   return md.trim() ? composeBible(bibleBodyOf(md), outlineOf(md), openQuestionsOf(md)) : "";
 }
 
