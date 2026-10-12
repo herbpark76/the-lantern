@@ -404,10 +404,15 @@ export interface ClaudeResult {
   output_tokens: number;
   /** "max_tokens" when the reply was cut off before it finished. */
   stop_reason?: string;
+  /** Diagnostics: the reply's block types, thinking mode and text length. */
+  blocks?: string;
 }
 
 let resolvedModel: string | null = null;
-let thinkingOffSupported = true;
+// How to keep hidden reasoning from eating the output budget. Tried in this order; we move down
+// the list if the API rejects a setting, or accepts it but still spends the whole reply thinking.
+type ThinkingMode = "disabled" | "small_budget" | "default";
+let thinkingMode: ThinkingMode = "disabled";
 
 async function pickFallbackModel(): Promise<string | null> {
   const resp = await fetch("https://api.anthropic.com/v1/models?limit=100", {
@@ -423,7 +428,12 @@ export async function callClaude(system: string, messages: ClaudeMessage[], maxT
   if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not configured");
   const model = resolvedModel ?? DEFAULT_MODEL;
 
-  const send = (m: string) =>
+  const thinkingParam = (mode: ThinkingMode) =>
+    mode === "disabled" ? { thinking: { type: "disabled" } }
+    : mode === "small_budget" && maxTokens > 3000 ? { thinking: { type: "enabled", budget_tokens: 1024 } }
+    : {};
+
+  const send = (m: string, mode: ThinkingMode) =>
     fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -436,28 +446,32 @@ export async function callClaude(system: string, messages: ClaudeMessage[], maxT
         max_tokens: maxTokens,
         system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
         messages,
-        // Hidden reasoning counts against max_tokens and can use up the whole budget before
-        // any text is written, so turn it off for these calls.
-        ...(thinkingOffSupported ? { thinking: { type: "disabled" } } : {}),
+        ...thinkingParam(mode),
       }),
     });
 
-  let resp = await send(model);
-  if (resp.status === 400 && thinkingOffSupported) {
-    const body = await resp.clone().text();
-    if (/thinking/i.test(body)) {
-      console.warn("[interview] model rejected thinking: disabled; retrying without it");
-      thinkingOffSupported = false;
-      resp = await send(model);
+  // Send, stepping down the thinking modes if the API rejects one.
+  const sendWithFallback = async (m: string): Promise<Response> => {
+    let resp = await send(m, thinkingMode);
+    while (resp.status === 400 && thinkingMode !== "default") {
+      const body = await resp.clone().text();
+      if (!/thinking|budget/i.test(body)) break;
+      const next: ThinkingMode = thinkingMode === "disabled" ? "small_budget" : "default";
+      console.warn(`[interview] API rejected thinking mode "${thinkingMode}" (${body.slice(0, 200)}); trying "${next}"`);
+      thinkingMode = next;
+      resp = await send(m, thinkingMode);
     }
-  }
+    return resp;
+  };
+
+  let resp = await sendWithFallback(model);
   if (resp.status === 404 && !resolvedModel) {
     // Model id not found — discover a current one and retry once.
     const fallback = await pickFallbackModel();
     if (fallback && fallback !== model) {
       console.warn(`[interview] model ${model} not found; using ${fallback}`);
       resolvedModel = fallback;
-      resp = await send(fallback);
+      resp = await sendWithFallback(fallback);
     }
   } else if (resp.ok) {
     resolvedModel = model;
@@ -469,14 +483,25 @@ export async function callClaude(system: string, messages: ClaudeMessage[], maxT
     throw new Error(`Claude API error ${resp.status}`);
   }
 
-  const data = await resp.json() as {
-    content: Array<{ type: string; text?: string }>;
+  type Reply = {
+    content: Array<{ type: string; text?: string; thinking?: string }>;
     stop_reason?: string;
     usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number };
   };
-  let text = data.content.filter((c) => c.type === "text").map((c) => c.text ?? "").join("").trim();
-  const hidden = data.content.filter((c) => c.type !== "text").length;
-  if (hidden) console.warn(`[interview] reply included ${hidden} non-text block(s): ${data.content.map((c) => c.type).join(", ")}`);
+  let data = await resp.json() as Reply;
+  const textOf = (d: Reply) => d.content.filter((c) => c.type === "text").map((c) => c.text ?? "").join("").trim();
+
+  // The setting was accepted but the whole budget still went on hidden reasoning: step down once and retry.
+  if (data.stop_reason === "max_tokens" && !textOf(data) && thinkingMode === "disabled" && maxTokens > 3000) {
+    console.warn("[interview] reply was all hidden reasoning with thinking disabled; retrying with a small thinking budget");
+    thinkingMode = "small_budget";
+    const retry = await send(resolvedModel ?? model, thinkingMode);
+    if (retry.ok) data = await retry.json() as Reply;
+  }
+
+  let text = textOf(data);
+  const blocks = data.content.map((c) => c.type).join(",");
+  if (data.content.some((c) => c.type !== "text")) console.warn(`[interview] reply blocks: ${blocks}`);
   if (data.stop_reason === "max_tokens") {
     // Ran out of room mid-sentence: keep only whole sentences so nothing is spoken half-finished.
     console.warn(`[interview] reply hit max_tokens (${maxTokens}); trimming to the last full sentence`);
@@ -489,6 +514,7 @@ export async function callClaude(system: string, messages: ClaudeMessage[], maxT
     input_tokens: (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0),
     output_tokens: u.output_tokens ?? 0,
     stop_reason: data.stop_reason,
+    blocks: `${blocks || "none"}; thinking=${thinkingMode}; ${text.length} chars of text`,
   };
 }
 

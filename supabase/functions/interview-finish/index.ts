@@ -161,7 +161,7 @@ function composeBible(bible: string, outline: string, open: string, previous = "
 }
 
 /** Refuse to save a bible from a reply that ran out of room: it would be missing its later sections. */
-function assertComplete(out: { stop_reason?: string; text?: string; output_tokens?: number }, what = "The bible update", needTag = ""): void {
+function assertComplete(out: { stop_reason?: string; text?: string; output_tokens?: number; blocks?: string }, what = "The bible update", needTag = ""): void {
   if (out.stop_reason !== "max_tokens") return;
   // Ran out of room, but the section we actually need was finished: keep it.
   if (needTag && (out.text ?? "").includes(`</${needTag}>`)) return;
@@ -169,7 +169,7 @@ function assertComplete(out: { stop_reason?: string; text?: string; output_token
   const chapters = (text.match(/^###\s*Chapter\s+\d+/gim) ?? []).length;
   const tail = text.slice(-90).replace(/\s+/g, " ");
   console.error(`[interview-finish] ${what} cut off at ${out.output_tokens} tokens; ${chapters} chapter headings; tail: ${text.slice(-2000)}`);
-  throw new Error(`${what} was too long and got cut off (${out.output_tokens ?? "?"} tokens, ${chapters} chapters written, ends "…${tail}"), so nothing was changed.`);
+  throw new Error(`${what} got cut off (${out.output_tokens ?? "?"} tokens, ${chapters} chapters; ${out.blocks ?? ""}; ends "…${tail.slice(-50)}"). Nothing was changed.`);
 }
 
 function personFolder(subject: Subject): string {
