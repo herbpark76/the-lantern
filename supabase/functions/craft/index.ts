@@ -7,7 +7,7 @@
 //
 // model: "sonnet" (default, ANTHROPIC_MODEL or claude-sonnet-5-5) or "opus" (claude-opus-5-5).
 
-import { admin, corsHeaders, getCaller, isStaffUser, json, jsonError } from "../_shared/interview.ts";
+import { admin, corsHeaders, getCaller, isStaffUser, json, jsonError } from "../_shared/common.ts";
 import { claudeTool, rubricFor, screenplayPages, STC_BEATS, versionText, wordCount, type SectionRow } from "../_shared/craft.ts";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.57.4";
 

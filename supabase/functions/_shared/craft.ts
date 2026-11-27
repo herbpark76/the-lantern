@@ -3,7 +3,7 @@
 // Each criterion paraphrases a principle from a well-known craft book. The scorer rates a
 // version red / yellow / green on each one, with evidence from the text and a concrete fix.
 
-import { ANTHROPIC_API_KEY } from "./interview.ts";
+import { ANTHROPIC_API_KEY } from "./common.ts";
 
 export interface Criterion {
   id: string;

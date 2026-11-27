@@ -10,7 +10,7 @@
 //   { action: "progress", token, section, done? }      → remember where they are
 //   { action: "finish", token }                        → marks the review as sent
 
-import { admin, corsHeaders, json, jsonError } from "../_shared/interview.ts";
+import { admin, corsHeaders, json, jsonError } from "../_shared/common.ts";
 
 const KINDS = ["comment", "suggest", "reaction", "pulse"];
 const REACTIONS = ["loved", "slow", "confused", "unconvinced", "funny", "moved"];
