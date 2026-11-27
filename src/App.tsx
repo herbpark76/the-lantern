@@ -9,10 +9,11 @@ import { StoryDetailPage } from "@/pages/StoryDetail";
 import { ReaderPage } from "@/pages/Reader";
 import { ShelfPage } from "@/pages/Shelf";
 import { StudioPage } from "@/pages/Studio";
-import { InterviewPage } from "@/pages/Interview";
+import { WorkPage } from "@/pages/Work";
+import { ReviewPage } from "@/pages/Review";
 import { BookReaderPage } from "@/pages/BookReader";
 
-// "/interview/last%20exit" → "last exit"
+// "/book/last%20exit" → "last exit"
 function decodeSegment(seg: string | undefined): string | undefined {
   if (!seg) return seg;
   try { return decodeURIComponent(seg); } catch { return seg; }
@@ -22,8 +23,8 @@ function Routes() {
   const { path } = useRouter();
   const { segments } = parsePath(path);
 
-  // Interview Mode is a full-screen, nav-free page. /interview/<slug> picks one of several interviews.
-  if (segments[0] === "interview") return <InterviewPage slug={decodeSegment(segments[1])} />;
+  // A reader's private review link is a full-screen page with its own small header.
+  if (segments[0] === "review" && segments[1]) return <ReviewPage token={segments[1]} />;
 
   let page: React.ReactNode;
 
@@ -37,6 +38,8 @@ function Routes() {
     page = <ShelfPage />;
   } else if (segments[0] === "studio") {
     page = <StudioPage />;
+  } else if (segments[0] === "work" && segments[1]) {
+    page = <WorkPage key={segments[1]} slug={decodeSegment(segments[1])!} rest={segments.slice(2)} />;
   } else if (segments[0] === "book" && segments[1]) {
     page = <BookReaderPage slug={decodeSegment(segments[1])!} />;
   } else if (segments[0] === "story" && segments[1]) {

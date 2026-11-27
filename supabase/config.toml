@@ -29,3 +29,11 @@ entrypoint = "./functions/interview-admin/index.ts"
 [functions.book-audio]
 verify_jwt = true
 entrypoint = "./functions/book-audio/index.ts"
+
+[functions.review]
+verify_jwt = false
+entrypoint = "./functions/review/index.ts"
+
+[functions.craft]
+verify_jwt = true
+entrypoint = "./functions/craft/index.ts"

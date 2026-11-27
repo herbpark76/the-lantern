@@ -8,10 +8,10 @@ interface RouterContextValue {
 const RouterContext = createContext<RouterContextValue | undefined>(undefined);
 
 export function RouterProvider({ children }: { children: ReactNode }) {
-  const [path, setPath] = useState(window.location.pathname);
+  const [path, setPath] = useState(window.location.pathname + window.location.search);
 
   useEffect(() => {
-    const onPop = () => setPath(window.location.pathname);
+    const onPop = () => setPath(window.location.pathname + window.location.search);
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
@@ -32,6 +32,7 @@ export function useRouter() {
 }
 
 export function parsePath(path: string): { segments: string[]; params: Record<string, string> } {
-  const segments = path.split("/").filter(Boolean);
-  return { segments, params: {} };
+  const [pathname, query = ""] = path.split("?");
+  const segments = pathname.split("/").filter(Boolean);
+  return { segments, params: Object.fromEntries(new URLSearchParams(query)) };
 }

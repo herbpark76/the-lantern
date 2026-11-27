@@ -9,17 +9,14 @@ import {
   Film, Users, Loader2, CheckCircle, XCircle, ExternalLink, ChevronRight,
   MessageSquare, Send, X, Headphones, Mic,
 } from "lucide-react";
-import { InterviewsTab } from "@/components/InterviewsTab";
 import { BookTab } from "@/components/BookTab";
 
-type StudioTab = "stories" | "map" | "preview" | "queue" | "bible" | "tallies" | "directors" | "readers" | "interviews" | "book";
+type StudioTab = "stories" | "map" | "preview" | "queue" | "bible" | "tallies" | "directors" | "readers" | "book";
 
 export function StudioPage() {
-  const { profile, user } = useAuth();
+  const { profile } = useAuth();
   const { navigate } = useRouter();
   const [tab, setTab] = useState<StudioTab>("stories");
-  // Interviews where I'm the one talking (e.g. my ghostwriter workspace) — quick links in the header.
-  const [myInterviews, setMyInterviews] = useState<Array<{ story_slug: string; mode: string }>>([]);
   const [stories, setStories] = useState<Story[]>([]);
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -34,12 +31,6 @@ export function StudioPage() {
       setLoading(false);
     });
   }, [isAuthor]);
-
-  useEffect(() => {
-    if (!isAuthor || !user) return;
-    supabase.from("interview_subjects").select("story_slug, mode").eq("user_id", user.id).order("created_at")
-      .then(({ data }) => setMyInterviews((data as Array<{ story_slug: string; mode: string }>) ?? []));
-  }, [isAuthor, user]);
 
   if (!isAuthor) {
     return (
@@ -67,25 +58,14 @@ export function StudioPage() {
     { key: "tallies", label: "Tallies", icon: BarChart3 },
     { key: "directors", label: "Director's Cut", icon: Film },
     { key: "readers", label: "Readers", icon: Users },
-    { key: "interviews", label: "Interviews", icon: Mic },
-    { key: "book", label: "Book", icon: BookOpen },
+    { key: "book", label: "Book drafts & narration", icon: BookOpen },
   ];
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
       <div className="flex items-center justify-between mb-6">
         <h1 className="font-serif text-2xl text-ink-900 dark:text-ink-50">Author Studio</h1>
-        {myInterviews.length > 0 && (
-          <div className="flex flex-wrap justify-end gap-2 font-sans">
-            {myInterviews.map((i) => (
-              <a key={i.story_slug} href={`/interview/${i.story_slug}`}
-                className="btn-primary !py-1.5 !px-3 text-sm inline-flex items-center gap-1.5"
-                title={`Open the ${i.mode === "ghostwriter" ? "ghostwriter" : "interview"} for ${i.story_slug}`}>
-                <Mic size={14} /> {i.mode === "ghostwriter" ? "Ghostwriter" : "Interview"}: {i.story_slug}
-              </a>
-            ))}
-          </div>
-        )}
+        <button onClick={() => navigate("/")} className="btn-ghost !py-1.5 text-sm">Works repository →</button>
       </div>
 
       {/* Tab bar */}
@@ -110,7 +90,7 @@ export function StudioPage() {
       </div>
 
       {/* Story selector for tabs that need it */}
-      {(tab !== "stories" && tab !== "queue" && tab !== "interviews" && tab !== "book") && (
+      {(tab !== "stories" && tab !== "queue" && tab !== "book") && (
         <div className="mb-6">
           <select
             value={selectedSlug ?? ""}
@@ -137,7 +117,6 @@ export function StudioPage() {
       {tab === "tallies" && selectedSlug && <TalliesTab slug={selectedSlug} />}
       {tab === "directors" && selectedSlug && <DirectorsTab slug={selectedSlug} profile={profile} />}
       {tab === "readers" && <ReadersTab stories={stories} />}
-      {tab === "interviews" && <InterviewsTab />}
       {tab === "book" && <BookTab />}
     </div>
   );

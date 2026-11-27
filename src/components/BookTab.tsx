@@ -119,17 +119,6 @@ export function BookTab() {
   }, [anyGenerating, loadDocs]);
   useEffect(() => { try { localStorage.setItem("book-lang", lang); } catch { /* ignore */ } }, [lang]);
 
-  // Only offer "Interview" for books whose interview is the signed-in user's own (not Mom's).
-  const [myInterviewSlugs, setMyInterviewSlugs] = useState<string[]>([]);
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      const uid = data.user?.id;
-      if (!uid) return;
-      supabase.from("interview_subjects").select("story_slug").eq("user_id", uid)
-        .then(({ data: rows }) => setMyInterviewSlugs(((rows as Array<{ story_slug: string }>) ?? []).map((r) => r.story_slug)));
-    });
-  }, []);
-
   const loadStory = useCallback(async () => {
     if (!slug) { setStory(null); return; }
     const { data } = await supabase.from("stories").select("slug, title, blurb, status, settings").eq("slug", slug).maybeSingle();
@@ -157,7 +146,7 @@ export function BookTab() {
 
   if (loading) return <div className="py-12 flex justify-center"><Loader2 className="animate-spin text-ink-400" /></div>;
   if (!docs.length) {
-    return <p className="text-sm text-ink-500 font-sans">No book pages yet. Chapters and story bibles appear here after an interview is finished.</p>;
+    return <p className="text-sm text-ink-500 font-sans">No book drafts yet.</p>;
   }
 
   // Books written in only one language (e.g. English ghostwriter projects) show no language toggle.
@@ -288,12 +277,6 @@ export function BookTab() {
           <KindButton active={kind === "summary"} onClick={() => { setKind("summary"); setDocId(null); }} icon={<FileText size={16} />}>
             {englishOnly || summaries.some((d) => d.id.endsWith("/bible")) ? "Story Bible" : "Summary"}
           </KindButton>
-          {slug && myInterviewSlugs.includes(slug) && (
-            <a href={`/interview/${slug}`} target="_blank" rel="noreferrer"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-ink-200 dark:border-ink-700 text-ink-700 dark:text-ink-200 hover:bg-ink-100 dark:hover:bg-ink-800">
-              <Mic size={16} /> Interview
-            </a>
-          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {langs.length > 1 && (
@@ -354,16 +337,6 @@ export function BookTab() {
           )}
           {doc && !version && !doc.generating && (
             <span className="ml-auto inline-flex flex-wrap gap-2">
-              <button onClick={() => setShowNotes((v) => !v)}
-                className={`btn-secondary !py-2 !px-3 text-sm inline-flex items-center gap-1.5 ${showNotes ? "ring-2 ring-accent-400" : ""}`}>
-                <MessageSquare size={15} /> {kind === "sample" ? "Revise this chapter" : "Give notes on the bible"}
-              </button>
-              {kind === "summary" && (
-                <button onClick={buildPlan} disabled={writing} className="btn-secondary !py-2 !px-3 text-sm inline-flex items-center gap-1.5"
-                  title="Rebuild the three-act structure, plot points and chapter-by-chapter plan from the current bible">
-                  <Sparkles size={15} /> {plan ? "Rebuild chapter plan" : "Build chapter plan"}
-                </button>
-              )}
               {kind === "sample" && !editing && (
                 <>
                   <button onClick={startEdit} disabled={saving} className="btn-secondary !py-2 !px-3 text-sm inline-flex items-center gap-1.5"
@@ -375,12 +348,6 @@ export function BookTab() {
                     {saving ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} Import from repo
                   </button>
                 </>
-              )}
-              {kind === "sample" && (
-                <button onClick={() => createChapter()} disabled={writing}
-                  className="btn-primary !py-2 !px-3 text-sm inline-flex items-center gap-1.5">
-                  <Sparkles size={15} /> {nextPlan ? `Create Chapter ${nextNo}${nextPlan.title ? `: ${nextPlan.title}` : ""}` : "Create next chapter"}
-                </button>
               )}
             </span>
           )}
@@ -396,27 +363,6 @@ export function BookTab() {
         </p>
       )}
 
-      {kind === "sample" && ofKind.length === 0 && (
-        <div className="card p-6 text-center space-y-3 font-sans">
-          <p className="text-ink-600 dark:text-ink-300">No chapters yet. The first one is written from the story bible.</p>
-          <button onClick={() => createChapter()} disabled={writing} className="btn-primary !py-2">
-            <Sparkles size={15} /> Create Chapter 1
-          </button>
-        </div>
-      )}
-
-      {showNotes && doc && slug && !doc.generating && !version && (
-        <NotesPanel
-          slug={slug}
-          target={kind === "sample" ? doc : null}
-          targetTitle={titleOf(doc, "en")}
-          memoir={!englishOnly}
-          voiceLink={myInterviewSlugs.includes(slug) && englishOnly
-            ? `/interview/${slug}?revise=${kind === "sample" ? encodeURIComponent(doc.id) : ""}` : null}
-          onStarted={async () => { setShowNotes(false); await loadDocs(); }}
-        />
-      )}
-
       {version && (
         <div className="card px-4 py-3 flex flex-wrap items-center gap-3 font-sans text-sm border-warning-500/40 bg-warning-500/5">
           <History size={16} className="text-warning-600" />
@@ -428,13 +374,6 @@ export function BookTab() {
         </div>
       )}
       {msg && <p className="text-sm text-ink-600 dark:text-ink-300 font-sans">{msg}</p>}
-
-      {kind === "sample" && chapters.length > 0 && !plan && (
-        <p className="text-xs text-warning-600 font-sans -mt-2">
-          This book has no chapter plan yet, so new chapters only follow the bible loosely.{" "}
-          <button onClick={buildPlan} disabled={writing} className="underline">Build the chapter plan</button> first.
-        </p>
-      )}
 
       {doc?.generating && (!doc.gen_started_at || Date.now() - new Date(doc.gen_started_at).getTime() > 15 * 60 * 1000) ? (
         <div className="card px-6 py-8 text-center font-sans space-y-3">
@@ -495,101 +434,6 @@ export function BookTab() {
     </div>
   );
 }
-
-// ── Notes on a chapter (or the bible), typed or dictated ─────────────────
-
-function NotesPanel({ slug, target, targetTitle, memoir, voiceLink, onStarted }: {
-  slug: string; target: BookDoc | null; targetTitle: string; memoir: boolean; voiceLink: string | null; onStarted: () => void;
-}) {
-  const [notes, setNotes] = useState("");
-  const [fresh, setFresh] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [recording, setRecording] = useState(false);
-  const [transcribing, setTranscribing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const recRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-
-  const toggleDictation = async () => {
-    setError(null);
-    if (recording) { recRef.current?.stop(); return; }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mime = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find((m) => MediaRecorder.isTypeSupported?.(m));
-      const rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
-      chunksRef.current = [];
-      rec.ondataavailable = (e) => { if (e.data.size) chunksRef.current.push(e.data); };
-      rec.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
-        setRecording(false);
-        const blob = new Blob(chunksRef.current, { type: (rec.mimeType || "audio/webm").split(";")[0] });
-        if (blob.size < 1000) return;
-        setTranscribing(true);
-        try {
-          const r = await interviewApi.transcribe(blob, "en");
-          setNotes((n) => (n.trim() ? `${n.trim()}\n\n` : "") + r.text.trim());
-        } catch (e) { setError((e as Error).message); }
-        setTranscribing(false);
-      };
-      recRef.current = rec;
-      rec.start(1000);
-      setRecording(true);
-    } catch { setError("Couldn't use the microphone. Allow it in the browser and try again."); }
-  };
-
-  const submit = async () => {
-    setBusy(true); setError(null);
-    try {
-      if (target && fresh) await interviewApi.writeChapter(slug, target.id, notes.trim());
-      else await interviewApi.reviseNotes(slug, target?.id ?? null, notes.trim());
-      onStarted();
-    } catch (e) { setError((e as Error).message); }
-    setBusy(false);
-  };
-
-  return (
-    <div className="card p-5 space-y-3 font-sans">
-      <div>
-        <h3 className="font-serif text-lg text-ink-900 dark:text-ink-50">{target ? `Notes on ${targetTitle}` : "Notes on the story"}</h3>
-        <p className="text-sm text-ink-500 mt-1">
-          {target
-            ? <>Say what to change, deepen, cut or add. The chapter is rewritten with your notes{memoir ? " (in Korean, then the English translation)" : ""}, the story bible and plan take them in, and the current version is kept so you can switch back.</>
-            : <>Anything about characters, plot, tone or where the story goes. The story bible and chapter plan are updated; no chapter is rewritten.</>}
-        </p>
-      </div>
-      <textarea className="input-field !py-2 text-sm" rows={6} value={notes} onChange={(e) => setNotes(e.target.value)}
-        placeholder={target ? "e.g. Slow down the scene at the market. Her aunt should be funnier and louder. Cut the part about the radio. End the chapter on the bread, not the report card." : "e.g. The brother should be more sympathetic later on…"} />
-      {target && (
-        <label className="flex items-start gap-2 text-sm text-ink-700 dark:text-ink-200">
-          <input type="checkbox" className="mt-1" checked={fresh} onChange={(e) => setFresh(e.target.checked)} />
-          <span>
-            <strong>Start over</strong> instead of editing this draft: write the chapter fresh from its brief in the plan
-            {memoir ? ", her interviews" : ""} and the chapters before it, following your notes (optional). The current draft is kept as a version.
-          </span>
-        </label>
-      )}
-      <div className="flex flex-wrap items-center gap-2">
-        <button onClick={toggleDictation} disabled={transcribing || busy}
-          className={`btn-secondary !py-2 !px-3 text-sm inline-flex items-center gap-1.5 ${recording ? "!bg-[#c95a5a] !text-white" : ""}`}>
-          {transcribing ? <Loader2 size={14} className="animate-spin" /> : <Mic size={14} />}
-          {recording ? "Stop dictating" : transcribing ? "Transcribing…" : "Dictate"}
-        </button>
-        <button onClick={submit} disabled={busy || recording || transcribing || (!fresh && !notes.trim())} className="btn-primary !py-2 !px-3 text-sm">
-          {busy ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-          {target ? (fresh ? "Rewrite from scratch" : "Revise the chapter") : "Update the bible"}
-        </button>
-        {voiceLink && (
-          <a href={voiceLink} target="_blank" rel="noreferrer" className="text-sm text-accent-600 underline ml-auto">
-            Or talk it through with the editor
-          </a>
-        )}
-      </div>
-      {error && <p className="text-xs text-error-600">{error}</p>}
-    </div>
-  );
-}
-
-// ── Publish to the Library ────────────────────────────────────────────────
 
 function PublishPanel({ slug, story, chapters, bible, lang, onDone }: {
   slug: string; story: StoryRow | null; chapters: BookDoc[]; bible: BookDoc | null; lang: Lang; onDone: () => void;
